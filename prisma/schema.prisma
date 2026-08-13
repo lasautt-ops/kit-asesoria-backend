@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
+enum Rol {
   SUPERADMIN
   ADMIN
   DIRECTOR
@@ -15,97 +15,76 @@ enum UserRole {
   CLIENTE
 }
 
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-}
-
-model Company {
+model Empresa {
   id        String   @id @default(cuid())
-  name      String
-  taxId     String?
-  email     String?
-  phone     String?
-  address   String?
-  city      String?
-  postalCode String?
+  nombre    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  offices   Office[]
-  users     User[]
-  clients   Client[]
-
-  @@map("companies")
+  oficinas  Oficina[]
+  clientes  Cliente[]
+  usuarios  Usuario[]
 }
 
-model Office {
+model Oficina {
   id        String   @id @default(cuid())
-  name      String
-  address   String?
-  city      String?
-  postalCode String?
-  phone     String?
-  email     String?
+  nombre    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
-  users     User[]
-  clients   Client[]
-
-  @@index([companyId])
-  @@map("offices")
+  trabajadores Trabajador[]
+  clientes     Cliente[]
 }
 
-model User {
-  id        String     @id @default(cuid())
-  name      String
-  email     String     @unique
+model Usuario {
+  id        String   @id @default(cuid())
+  nombre    String
+  email     String   @unique
   password  String
-  role      UserRole
-  status    UserStatus @default(ACTIVE)
-
+  rol       Rol
+  activo    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  companyId String?
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
-  officeId  String?
-  office    Office? @relation(fields: [officeId], references: [id], onDelete: SetNull)
-
-  @@index([companyId])
-  @@index([officeId])
-  @@index([role])
-  @@map("users")
+  trabajador Trabajador?
+  cliente    Cliente?
 }
 
-model Client {
+model Trabajador {
   id        String   @id @default(cuid())
-  name      String
-  taxId     String?
-  email     String
-  phone     String?
-  address   String?
-  city      String?
-  postalCode String?
-
-  active    Boolean  @default(true)
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  usuarioId String   @unique
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
-  officeId  String
-  office    Office @relation(fields: [officeId], references: [id], onDelete: Restrict)
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
-  @@index([companyId])
-  @@index([officeId])
-  @@index([email])
-  @@map("clients")
+  oficinaId String
+  oficina   Oficina @relation(fields: [oficinaId], references: [id], onDelete: Cascade)
+}
+
+model Cliente {
+  id        String   @id @default(cuid())
+  nombre    String
+  email     String
+  telefono  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuarioId String?  @unique
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  oficinaId String
+  oficina   Oficina @relation(fields: [oficinaId], references: [id], onDelete: Cascade)
 }
