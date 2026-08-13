@@ -6,3 +6,106 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  DIRECTOR
+  TRABAJADOR
+  CLIENTE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  taxId     String?
+  email     String?
+  phone     String?
+  address   String?
+  city      String?
+  postalCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  offices   Office[]
+  users     User[]
+  clients   Client[]
+
+  @@map("companies")
+}
+
+model Office {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  city      String?
+  postalCode String?
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  users     User[]
+  clients   Client[]
+
+  @@index([companyId])
+  @@map("offices")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  name      String
+  email     String     @unique
+  password  String
+  role      UserRole
+  status    UserStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  officeId  String?
+  office    Office? @relation(fields: [officeId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([officeId])
+  @@index([role])
+  @@map("users")
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  taxId     String?
+  email     String
+  phone     String?
+  address   String?
+  city      String?
+  postalCode String?
+
+  active    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  officeId  String
+  office    Office @relation(fields: [officeId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@index([officeId])
+  @@index([email])
+  @@map("clients")
+}
