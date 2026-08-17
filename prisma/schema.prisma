@@ -21,9 +21,10 @@ model Empresa {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  oficinas  Oficina[]
-  clientes  Cliente[]
-  usuarios  Usuario[]
+  oficinas     Oficina[]
+  trabajadores Trabajador[]
+  clientes     Cliente[]
+  usuarios     Usuario[]
 }
 
 model Oficina {
