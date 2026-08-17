@@ -50,11 +50,18 @@ model Usuario {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  empresaId String
-  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId String?
+  empresa   Empresa? @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  oficinaId String?
+  oficina   Oficina? @relation(fields: [oficinaId], references: [id], onDelete: SetNull)
 
   trabajador Trabajador?
   cliente    Cliente?
+
+  @@index([empresaId])
+  @@index([oficinaId])
+  @@index([rol])
 }
 
 model Trabajador {
