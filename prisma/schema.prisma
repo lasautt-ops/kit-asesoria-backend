@@ -36,8 +36,11 @@ model Oficina {
   empresaId String
   empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
-  trabajadores Trabajador[]
-  clientes     Cliente[]
+  usuarios      Usuario[]
+  trabajadores  Trabajador[]
+  clientes      Cliente[]
+
+  @@index([empresaId])
 }
 
 model Usuario {
