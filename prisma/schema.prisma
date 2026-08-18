@@ -18,6 +18,7 @@ enum Rol {
 model Empresa {
   id        String   @id @default(cuid())
   nombre    String
+  activo    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
