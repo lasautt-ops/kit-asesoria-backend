@@ -47,5 +47,26 @@ app.post("/api/empresas", async (req, res) => {
     });
   }
 });
+// Listar empresas
+app.get("/api/empresas", async (req, res) => {
+  try {
+    const empresas = await prisma.empresa.findMany({
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
 
+    res.json({
+      ok: true,
+      empresas
+    });
+  } catch (error) {
+    console.error("Error obteniendo empresas:", error);
+
+    res.status(500).json({
+      ok: false,
+      message: "Error interno del servidor"
+    });
+  }
+});
 module.exports = app;
