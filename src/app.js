@@ -54,10 +54,13 @@ const empresas = await prisma.empresa.findMany({
 app.get("/api/empresas", async (req, res) => {
   try {
     const empresas = await prisma.empresa.findMany({
-      orderBy: {
-        createdAt: "desc"
-      }
-    });
+  where: {
+    activo: true
+  },
+  orderBy: {
+    createdAt: "desc"
+  }
+});
 
     res.json({
       ok: true,
