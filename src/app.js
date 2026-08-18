@@ -366,4 +366,106 @@ app.patch("/api/oficinas/:id/activar", async (req, res) => {
     });
   }
 });
+// Crear trabajador
+app.post("/api/trabajadores", async (req, res) => {
+  try {
+    const {
+      nombre,
+      email,
+      password,
+      empresaId,
+      oficinaId
+    } = req.body;
+
+    if (!nombre || !email || !password || !empresaId || !oficinaId) {
+      return res.status(400).json({
+        ok: false,
+        message: "Nombre, email, password, empresa y oficina son obligatorios"
+      });
+    }
+
+    // Comprobar empresa
+    const empresa = await prisma.empresa.findUnique({
+      where: {
+        id: empresaId
+      }
+    });
+
+    if (!empresa) {
+      return res.status(404).json({
+        ok: false,
+        message: "Empresa no encontrada"
+      });
+    }
+
+    // Comprobar oficina y que pertenece a la empresa
+    const oficina = await prisma.oficina.findFirst({
+      where: {
+        id: oficinaId,
+        empresaId
+      }
+    });
+
+    if (!oficina) {
+      return res.status(404).json({
+        ok: false,
+        message: "Oficina no encontrada o no pertenece a la empresa"
+      });
+    }
+
+    // Comprobar email
+    const usuarioExistente = await prisma.usuario.findUnique({
+      where: {
+        email
+      }
+    });
+
+    if (usuarioExistente) {
+      return res.status(409).json({
+        ok: false,
+        message: "El email ya está registrado"
+      });
+    }
+
+    // Crear usuario y trabajador
+    const resultado = await prisma.$transaction(async (tx) => {
+      const usuario = await tx.usuario.create({
+        data: {
+          nombre,
+          email,
+          password,
+          rol: "TRABAJADOR",
+          activo: true,
+          empresaId,
+          oficinaId
+        }
+      });
+
+      const trabajador = await tx.trabajador.create({
+        data: {
+          usuarioId: usuario.id,
+          empresaId,
+          oficinaId
+        },
+        include: {
+          usuario: true
+        }
+      });
+
+      return trabajador;
+    });
+
+    res.status(201).json({
+      ok: true,
+      trabajador: resultado
+    });
+  } catch (error) {
+    console.error("Error creando trabajador:", error);
+
+    res.status(500).json({
+      ok: false,
+      message: "Error interno del servidor"
+    });
+  }
+});
 module.exports = app;
