@@ -69,4 +69,36 @@ app.get("/api/empresas", async (req, res) => {
     });
   }
 });
+// Obtener una empresa por ID
+app.get("/api/empresas/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const empresa = await prisma.empresa.findUnique({
+      where: {
+        id
+      }
+    });
+
+    if (!empresa) {
+      return res.status(404).json({
+        ok: false,
+        message: "Empresa no encontrada"
+      });
+    }
+
+    res.json({
+      ok: true,
+      empresa
+    });
+  } catch (error) {
+    console.error("Error obteniendo empresa:", error);
+
+    res.status(500).json({
+      ok: false,
+      message: "Error interno del servidor"
+    });
+  }
+});
+
 module.exports = app;
