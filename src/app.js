@@ -142,4 +142,38 @@ app.put("/api/empresas/:id", async (req, res) => {
     });
   }
 });
+// Desactivar una empresa
+app.patch("/api/empresas/:id/desactivar", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const empresa = await prisma.empresa.update({
+      where: {
+        id
+      },
+      data: {
+        activo: false
+      }
+    });
+
+    res.json({
+      ok: true,
+      empresa
+    });
+  } catch (error) {
+    console.error("Error desactivando empresa:", error);
+
+    if (error.code === "P2025") {
+      return res.status(404).json({
+        ok: false,
+        message: "Empresa no encontrada"
+      });
+    }
+
+    res.status(500).json({
+      ok: false,
+      message: "Error interno del servidor"
+    });
+  }
+});
 module.exports = app;
