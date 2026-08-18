@@ -332,4 +332,38 @@ app.patch("/api/oficinas/:id/desactivar", async (req, res) => {
     });
   }
 });
+// Activar una oficina
+app.patch("/api/oficinas/:id/activar", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const oficina = await prisma.oficina.update({
+      where: {
+        id
+      },
+      data: {
+        activo: true
+      }
+    });
+
+    res.json({
+      ok: true,
+      oficina
+    });
+  } catch (error) {
+    console.error("Error activando oficina:", error);
+
+    if (error.code === "P2025") {
+      return res.status(404).json({
+        ok: false,
+        message: "Oficina no encontrada"
+      });
+    }
+
+    res.status(500).json({
+      ok: false,
+      message: "Error interno del servidor"
+    });
+  }
+});
 module.exports = app;
