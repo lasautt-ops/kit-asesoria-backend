@@ -28,11 +28,14 @@ app.post("/api/empresas", async (req, res) => {
       });
     }
 
-    const empresa = await prisma.empresa.create({
-      data: {
-        nombre
-      }
-    });
+const empresas = await prisma.empresa.findMany({
+  where: {
+    activo: true
+  },
+  orderBy: {
+    createdAt: "desc"
+  }
+});
 
     res.status(201).json({
       ok: true,
