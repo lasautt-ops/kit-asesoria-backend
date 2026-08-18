@@ -100,5 +100,46 @@ app.get("/api/empresas/:id", async (req, res) => {
     });
   }
 });
+// Modificar una empresa
+app.put("/api/empresas/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre } = req.body;
 
+    if (!nombre) {
+      return res.status(400).json({
+        ok: false,
+        message: "El nombre de la empresa es obligatorio"
+      });
+    }
+
+    const empresa = await prisma.empresa.update({
+      where: {
+        id
+      },
+      data: {
+        nombre
+      }
+    });
+
+    res.json({
+      ok: true,
+      empresa
+    });
+  } catch (error) {
+    console.error("Error modificando empresa:", error);
+
+    if (error.code === "P2025") {
+      return res.status(404).json({
+        ok: false,
+        message: "Empresa no encontrada"
+      });
+    }
+
+    res.status(500).json({
+      ok: false,
+      message: "Error interno del servidor"
+    });
+  }
+});
 module.exports = app;
