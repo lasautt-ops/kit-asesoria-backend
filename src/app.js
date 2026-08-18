@@ -258,4 +258,44 @@ app.post("/api/oficinas", async (req, res) => {
     });
   }
 });
+// Listar oficinas de una empresa
+app.get("/api/empresas/:empresaId/oficinas", async (req, res) => {
+  try {
+    const { empresaId } = req.params;
+
+    const empresa = await prisma.empresa.findUnique({
+      where: {
+        id: empresaId
+      }
+    });
+
+    if (!empresa) {
+      return res.status(404).json({
+        ok: false,
+        message: "Empresa no encontrada"
+      });
+    }
+
+    const oficinas = await prisma.oficina.findMany({
+      where: {
+        empresaId
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    res.json({
+      ok: true,
+      oficinas
+    });
+  } catch (error) {
+    console.error("Error obteniendo oficinas:", error);
+
+    res.status(500).json({
+      ok: false,
+      message: "Error interno del servidor"
+    });
+  }
+});
 module.exports = app;
