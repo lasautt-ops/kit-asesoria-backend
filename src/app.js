@@ -389,6 +389,32 @@ app.post(
       oficinaId
     } = req.body;
 
+        // Comprobar permisos según el rol
+    if (req.usuario.rol === "DIRECTOR") {
+      if (req.usuario.empresaId !== empresaId) {
+        return res.status(403).json({
+          ok: false,
+          message: "El director no puede crear trabajadores en otra empresa"
+        });
+      }
+
+      if (req.usuario.oficinaId !== oficinaId) {
+        return res.status(403).json({
+          ok: false,
+          message: "El director no puede crear trabajadores en otra oficina"
+        });
+      }
+    }
+
+    if (req.usuario.rol === "ADMIN") {
+      if (req.usuario.empresaId !== empresaId) {
+        return res.status(403).json({
+          ok: false,
+          message: "El administrador no puede crear trabajadores en otra empresa"
+        });
+      }
+    }
+
     if (!nombre || !email || !password || !empresaId || !oficinaId) {
       return res.status(400).json({
         ok: false,
