@@ -222,7 +222,11 @@ app.patch("/api/empresas/:id/activar", async (req, res) => {
   }
 });
 // Crear oficina
-app.post("/api/oficinas", async (req, res) => {
+app.post(
+  "/api/oficinas",
+  autenticarToken,
+  permitirRoles("SUPERADMIN"),
+  async (req, res) => {
   try {
     const { nombre, empresaId } = req.body;
 
