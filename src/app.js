@@ -450,8 +450,20 @@ app.post("/api/trabajadores", async (req, res) => {
           oficinaId
         },
         include: {
-          usuario: true
-        }
+  usuario: {
+    select: {
+      id: true,
+      nombre: true,
+      email: true,
+      rol: true,
+      activo: true,
+      createdAt: true,
+      updatedAt: true,
+      empresaId: true,
+      oficinaId: true
+    }
+  }
+}
       });
 
       return trabajador;
