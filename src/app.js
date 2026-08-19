@@ -693,6 +693,56 @@ app.post(
     }
   }
 );
+// Obtener clientes según el rol
+app.get(
+  "/api/clientes",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      let where = {};
+
+      // SUPERADMIN puede ver todos los clientes
+      if (req.usuario.rol === "SUPERADMIN") {
+        where = {};
+      }
+
+      // ADMIN puede ver todos los clientes de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        where = {
+          empresaId: req.usuario.empresaId
+        };
+      }
+
+      // DIRECTOR puede ver los clientes de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        where = {
+          empresaId: req.usuario.empresaId,
+          oficinaId: req.usuario.oficinaId
+        };
+      }
+
+      const clientes = await prisma.cliente.findMany({
+        where,
+        orderBy: {
+          createdAt: "desc"
+        }
+      });
+
+      res.json({
+        ok: true,
+        clientes
+      });
+    } catch (error) {
+      console.error("Error obteniendo clientes:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
 // Login
 app.post("/api/login", async (req, res) => {
   try {
