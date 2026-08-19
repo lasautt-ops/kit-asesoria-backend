@@ -535,6 +535,62 @@ app.post(
     });
   }
 });
+// Obtener trabajadores
+app.get(
+  "/api/trabajadores",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      let where = {};
+
+      // ADMIN: solo trabajadores de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        where.empresaId = req.usuario.empresaId;
+      }
+
+      // DIRECTOR: solo trabajadores de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        where.empresaId = req.usuario.empresaId;
+        where.oficinaId = req.usuario.oficinaId;
+      }
+
+      const trabajadores = await prisma.trabajador.findMany({
+        where,
+        include: {
+          usuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true,
+              activo: true,
+              createdAt: true,
+              updatedAt: true,
+              empresaId: true,
+              oficinaId: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        }
+      });
+
+      res.json({
+        ok: true,
+        trabajadores
+      });
+    } catch (error) {
+      console.error("Error obteniendo trabajadores:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
 // Login
 app.post("/api/login", async (req, res) => {
   try {
