@@ -591,6 +591,108 @@ app.get(
     }
   }
 );
+// Crear cliente
+app.post(
+  "/api/clientes",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const {
+        nombre,
+        email,
+        telefono,
+        empresaId,
+        oficinaId
+      } = req.body;
+
+      // Comprobar permisos según el rol
+      if (req.usuario.rol === "DIRECTOR") {
+        if (req.usuario.empresaId !== empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede crear clientes en otra empresa"
+          });
+        }
+
+        if (req.usuario.oficinaId !== oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede crear clientes en otra oficina"
+          });
+        }
+      }
+
+      if (req.usuario.rol === "ADMIN") {
+        if (req.usuario.empresaId !== empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede crear clientes en otra empresa"
+          });
+        }
+      }
+
+      if (!nombre || !email || !empresaId || !oficinaId) {
+        return res.status(400).json({
+          ok: false,
+          message: "Nombre, email, empresa y oficina son obligatorios"
+        });
+      }
+
+      // Comprobar empresa
+      const empresa = await prisma.empresa.findUnique({
+        where: {
+          id: empresaId
+        }
+      });
+
+      if (!empresa) {
+        return res.status(404).json({
+          ok: false,
+          message: "Empresa no encontrada"
+        });
+      }
+
+      // Comprobar oficina y que pertenece a la empresa
+      const oficina = await prisma.oficina.findFirst({
+        where: {
+          id: oficinaId,
+          empresaId
+        }
+      });
+
+      if (!oficina) {
+        return res.status(404).json({
+          ok: false,
+          message: "Oficina no encontrada o no pertenece a la empresa"
+        });
+      }
+
+      // Crear cliente
+      const cliente = await prisma.cliente.create({
+        data: {
+          nombre,
+          email,
+          telefono: telefono || null,
+          empresaId,
+          oficinaId
+        }
+      });
+
+      res.status(201).json({
+        ok: true,
+        cliente
+      });
+    } catch (error) {
+      console.error("Error creando cliente:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
 // Login
 app.post("/api/login", async (req, res) => {
   try {
