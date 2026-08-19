@@ -429,6 +429,7 @@ app.post("/api/trabajadores", async (req, res) => {
     }
 
     // Crear usuario y trabajador
+    const passwordHash = await bcrypt.hash(password, 12);
     const resultado = await prisma.$transaction(async (tx) => {
       const usuario = await tx.usuario.create({
         data: {
