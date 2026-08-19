@@ -311,7 +311,11 @@ app.get("/api/empresas/:empresaId/oficinas", async (req, res) => {
   }
 });
 // Desactivar una oficina
-app.patch("/api/oficinas/:id/desactivar", async (req, res) => {
+app.patch(
+  "/api/oficinas/:id/desactivar",
+  autenticarToken,
+  permitirRoles("SUPERADMIN"),
+  async (req, res) => {
   try {
     const { id } = req.params;
 
