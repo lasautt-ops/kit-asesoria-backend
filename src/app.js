@@ -3,6 +3,7 @@ const cors = require("cors");
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const autenticarToken = require("./middleware/auth");
 
 const app = express();
 const prisma = new PrismaClient();
@@ -50,7 +51,7 @@ app.post("/api/empresas", async (req, res) => {
   }
 });
 // Listar empresas
-app.get("/api/empresas", async (req, res) => {
+app.get("/api/empresas", autenticarToken, async (req, res) => {
   try {
     const empresas = await prisma.empresa.findMany({
   where: {
