@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 const prisma = new PrismaClient();
@@ -475,6 +476,79 @@ app.post("/api/trabajadores", async (req, res) => {
     });
   } catch (error) {
     console.error("Error creando trabajador:", error);
+
+    res.status(500).json({
+      ok: false,
+      message: "Error interno del servidor"
+    });
+  }
+});
+// Login
+app.post("/api/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        ok: false,
+        message: "El email y la contraseña son obligatorios"
+      });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: {
+        email
+      }
+    });
+
+    if (!usuario || !usuario.activo) {
+      return res.status(401).json({
+        ok: false,
+        message: "Email o contraseña incorrectos"
+      });
+    }
+
+    const passwordCorrecta = await bcrypt.compare(
+      password,
+      usuario.password
+    );
+
+    if (!passwordCorrecta) {
+      return res.status(401).json({
+        ok: false,
+        message: "Email o contraseña incorrectos"
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: usuario.id,
+        email: usuario.email,
+        rol: usuario.rol,
+        empresaId: usuario.empresaId,
+        oficinaId: usuario.oficinaId
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "8h"
+      }
+    );
+
+    res.json({
+      ok: true,
+      message: "Login correcto",
+      token,
+      usuario: {
+        id: usuario.id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: usuario.rol,
+        empresaId: usuario.empresaId,
+        oficinaId: usuario.oficinaId
+      }
+    });
+  } catch (error) {
+    console.error("Error en login:", error);
 
     res.status(500).json({
       ok: false,
