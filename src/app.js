@@ -188,7 +188,11 @@ app.patch("/api/empresas/:id/desactivar", async (req, res) => {
   }
 });
 // Activar una empresa
-app.patch("/api/empresas/:id/activar", async (req, res) => {
+app.patch(
+  "/api/oficinas/:id/activar",
+  autenticarToken,
+  permitirRoles("SUPERADMIN"),
+  async (req, res) => {
   try {
     const { id } = req.params;
 
