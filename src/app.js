@@ -375,7 +375,11 @@ app.patch("/api/oficinas/:id/activar", async (req, res) => {
   }
 });
 // Crear trabajador
-app.post("/api/trabajadores", async (req, res) => {
+app.post(
+  "/api/trabajadores",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
   try {
     const {
       nombre,
