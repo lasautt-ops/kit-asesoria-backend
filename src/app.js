@@ -434,7 +434,7 @@ app.post("/api/trabajadores", async (req, res) => {
         data: {
           nombre,
           email,
-          password,
+          password, passwordHash,
           rol: "TRABAJADOR",
           activo: true,
           empresaId,
