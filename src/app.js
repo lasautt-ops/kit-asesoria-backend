@@ -353,7 +353,11 @@ app.patch(
   }
 });
 // Activar una oficina
-app.patch("/api/oficinas/:id/activar", async (req, res) => {
+app.patch(
+  "/api/oficinas/:id/activar",
+  autenticarToken,
+  permitirRoles("SUPERADMIN"),
+  async (req, res) => {
   try {
     const { id } = req.params;
 
