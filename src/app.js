@@ -4,6 +4,7 @@ const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const autenticarToken = require("./middleware/auth");
+const permitirRoles = require("./middleware/roles");
 
 const app = express();
 const prisma = new PrismaClient();
@@ -20,7 +21,11 @@ app.get("/api/health", (req, res) => {
 });
 
 // Crear empresa
-app.post("/api/empresas", async (req, res) => {
+app.post(
+  "/api/empresas",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN"),
+  async (req, res) => {
   try {
     const { nombre } = req.body;
 
