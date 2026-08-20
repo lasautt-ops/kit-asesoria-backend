@@ -2438,6 +2438,262 @@ app.delete(
   }
 );
 
+// Crear tarea
+app.post(
+  "/api/tareas",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  async (req, res) => {
+    try {
+      const {
+        titulo,
+        descripcion,
+        prioridad,
+        fechaLimite,
+        empresaId,
+        oficinaId,
+        clienteId,
+        asignadoAUsuarioId
+      } = req.body;
+
+      // Comprobar datos obligatorios
+      if (!titulo || !empresaId) {
+        return res.status(400).json({
+          ok: false,
+          message: "El título y la empresa son obligatorios"
+        });
+      }
+
+      // Buscar empresa
+      const empresa = await prisma.empresa.findUnique({
+        where: {
+          id: empresaId
+        }
+      });
+
+      if (!empresa) {
+        return res.status(404).json({
+          ok: false,
+          message: "Empresa no encontrada"
+        });
+      }
+
+      // ADMIN solo puede crear tareas dentro de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede crear tareas en otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede crear tareas dentro de su empresa y oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede crear tareas en otra empresa"
+          });
+        }
+
+        if (oficinaId !== req.usuario.oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede crear tareas en otra oficina"
+          });
+        }
+      }
+
+      // TRABAJADOR solo puede crear tareas dentro de su empresa y oficina
+      if (req.usuario.rol === "TRABAJADOR") {
+        if (empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede crear tareas en otra empresa"
+          });
+        }
+
+        if (oficinaId !== req.usuario.oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede crear tareas en otra oficina"
+          });
+        }
+
+        // Si se vincula un cliente, debe ser uno de sus clientes asignados
+        if (clienteId) {
+          const trabajador = await prisma.trabajador.findUnique({
+            where: {
+              usuarioId: req.usuario.id
+            }
+          });
+
+          if (!trabajador) {
+            return res.status(404).json({
+              ok: false,
+              message: "Trabajador no encontrado"
+            });
+          }
+
+          const cliente = await prisma.cliente.findUnique({
+            where: {
+              id: clienteId
+            }
+          });
+
+          if (!cliente) {
+            return res.status(404).json({
+              ok: false,
+              message: "Cliente no encontrado"
+            });
+          }
+
+          if (cliente.trabajadorId !== trabajador.id) {
+            return res.status(403).json({
+              ok: false,
+              message: "El trabajador no puede crear tareas para este cliente"
+            });
+          }
+        }
+      }
+
+      // Si se indica oficina, comprobar que pertenece a la empresa
+      if (oficinaId) {
+        const oficina = await prisma.oficina.findFirst({
+          where: {
+            id: oficinaId,
+            empresaId
+          }
+        });
+
+        if (!oficina) {
+          return res.status(404).json({
+            ok: false,
+            message: "Oficina no encontrada o no pertenece a la empresa"
+          });
+        }
+      }
+
+      // Si se indica cliente, comprobar que pertenece a la empresa
+      if (clienteId) {
+        const cliente = await prisma.cliente.findUnique({
+          where: {
+            id: clienteId
+          }
+        });
+
+        if (!cliente) {
+          return res.status(404).json({
+            ok: false,
+            message: "Cliente no encontrado"
+          });
+        }
+
+        if (cliente.empresaId !== empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente no pertenece a la empresa indicada"
+          });
+        }
+
+        // Si hay oficina, el cliente debe pertenecer a esa oficina
+        if (oficinaId && cliente.oficinaId !== oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente no pertenece a la oficina indicada"
+          });
+        }
+      }
+
+      // Si se indica usuario asignado, comprobar que existe
+      if (asignadoAUsuarioId) {
+        const usuarioAsignado = await prisma.usuario.findUnique({
+          where: {
+            id: asignadoAUsuarioId
+          }
+        });
+
+        if (!usuarioAsignado) {
+          return res.status(404).json({
+            ok: false,
+            message: "Usuario asignado no encontrado"
+          });
+        }
+
+        // El usuario asignado debe pertenecer a la misma empresa
+        if (usuarioAsignado.empresaId !== empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El usuario asignado no pertenece a la empresa indicada"
+          });
+        }
+
+        // DIRECTOR y TRABAJADOR solo pueden asignar tareas dentro de su oficina
+        if (
+          (req.usuario.rol === "DIRECTOR" ||
+            req.usuario.rol === "TRABAJADOR") &&
+          usuarioAsignado.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "No puedes asignar la tarea a un usuario de otra oficina"
+          });
+        }
+      }
+
+      // Crear tarea
+      const tarea = await prisma.tarea.create({
+        data: {
+          titulo,
+          descripcion: descripcion || null,
+          prioridad: prioridad || "MEDIA",
+          fechaLimite: fechaLimite ? new Date(fechaLimite) : null,
+          empresaId,
+          oficinaId: oficinaId || null,
+          clienteId: clienteId || null,
+          asignadoAUsuarioId: asignadoAUsuarioId || null,
+          creadoPorUsuarioId: req.usuario.id
+        },
+        include: {
+          empresa: true,
+          oficina: true,
+          cliente: true,
+          asignadoAUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          },
+          creadoPorUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          }
+        }
+      });
+
+      res.status(201).json({
+        ok: true,
+        message: "Tarea creada correctamente",
+        tarea
+      });
+    } catch (error) {
+      console.error("Error creando tarea:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
