@@ -1573,6 +1573,122 @@ app.get(
     }
   }
 );
+
+// Descargar documento según permisos
+app.get(
+  "/api/documentos/:id/descargar",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR", "CLIENTE"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const documento = await prisma.documento.findUnique({
+        where: {
+          id
+        },
+        include: {
+          cliente: true
+        }
+      });
+
+      if (!documento) {
+        return res.status(404).json({
+          ok: false,
+          message: "Documento no encontrado"
+        });
+      }
+
+      // ADMIN solo puede descargar documentos de clientes de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (documento.cliente.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede descargar documentos de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede descargar documentos de clientes de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          documento.cliente.empresaId !== req.usuario.empresaId ||
+          documento.cliente.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede descargar documentos de otra oficina"
+          });
+        }
+      }
+
+      // TRABAJADOR solo puede descargar documentos de sus clientes
+      if (req.usuario.rol === "TRABAJADOR") {
+        const trabajador = await prisma.trabajador.findUnique({
+          where: {
+            usuarioId: req.usuario.id
+          }
+        });
+
+        if (!trabajador) {
+          return res.status(404).json({
+            ok: false,
+            message: "Trabajador no encontrado"
+          });
+        }
+
+        if (documento.cliente.trabajadorId !== trabajador.id) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede descargar este documento"
+          });
+        }
+      }
+
+      // CLIENTE solo puede descargar sus propios documentos
+      if (req.usuario.rol === "CLIENTE") {
+        const cliente = await prisma.cliente.findUnique({
+          where: {
+            usuarioId: req.usuario.id
+          }
+        });
+
+        if (!cliente || documento.clienteId !== cliente.id) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente no puede descargar este documento"
+          });
+        }
+      }
+
+      // Comprobar que el archivo existe
+      if (!fs.existsSync(documento.rutaArchivo)) {
+        return res.status(404).json({
+          ok: false,
+          message: "Archivo no encontrado en el servidor"
+        });
+      }
+
+      // Descargar archivo
+      res.download(
+        documento.rutaArchivo,
+        documento.nombreArchivo,
+        (error) => {
+          if (error) {
+            console.error("Error descargando documento:", error);
+          }
+        }
+      );
+    } catch (error) {
+      console.error("Error descargando documento:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
 // Login
 app.post("/api/login", async (req, res) => {
   try {
