@@ -693,6 +693,139 @@ app.post(
     }
   }
 );
+// Crear acceso de usuario para un cliente
+app.post(
+  "/api/clientes/:id/crear-acceso",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { password } = req.body;
+
+      if (!password) {
+        return res.status(400).json({
+          ok: false,
+          message: "La contraseña es obligatoria"
+        });
+      }
+
+      if (password.length < 8) {
+        return res.status(400).json({
+          ok: false,
+          message: "La contraseña debe tener al menos 8 caracteres"
+        });
+      }
+
+      // Buscar cliente
+      const cliente = await prisma.cliente.findUnique({
+        where: {
+          id
+        }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      // Comprobar permisos según el rol
+      if (req.usuario.rol === "ADMIN") {
+        if (cliente.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede crear accesos de clientes de otra empresa"
+          });
+        }
+      }
+
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          cliente.empresaId !== req.usuario.empresaId ||
+          cliente.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede crear accesos de clientes de otra oficina"
+          });
+        }
+      }
+
+      // Comprobar si el cliente ya tiene usuario
+      if (cliente.usuarioId) {
+        return res.status(400).json({
+          ok: false,
+          message: "Este cliente ya tiene un acceso creado"
+        });
+      }
+
+      // Comprobar si el email ya pertenece a otro usuario
+      const usuarioExistente = await prisma.usuario.findUnique({
+        where: {
+          email: cliente.email
+        }
+      });
+
+      if (usuarioExistente) {
+        return res.status(400).json({
+          ok: false,
+          message: "El email del cliente ya está asociado a otro usuario"
+        });
+      }
+
+      // Encriptar contraseña
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // Crear usuario y asociarlo al cliente
+      const resultado = await prisma.$transaction(async (tx) => {
+        const usuario = await tx.usuario.create({
+          data: {
+            nombre: cliente.nombre,
+            email: cliente.email,
+            password: passwordHash,
+            rol: "CLIENTE",
+            empresaId: cliente.empresaId,
+            oficinaId: cliente.oficinaId
+          }
+        });
+
+        const clienteActualizado = await tx.cliente.update({
+          where: {
+            id: cliente.id
+          },
+          data: {
+            usuarioId: usuario.id
+          }
+        });
+
+        return {
+          usuario,
+          cliente: clienteActualizado
+        };
+      });
+
+      res.status(201).json({
+        ok: true,
+        message: "Acceso del cliente creado correctamente",
+        cliente: {
+          id: resultado.cliente.id,
+          nombre: resultado.cliente.nombre,
+          email: resultado.cliente.email,
+          usuarioId: resultado.cliente.usuarioId
+        }
+      });
+    } catch (error) {
+      console.error("Error creando acceso del cliente:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
 // Obtener clientes según el rol
 app.get(
   "/api/clientes",
