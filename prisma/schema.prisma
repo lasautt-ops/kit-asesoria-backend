@@ -84,6 +84,8 @@ model Trabajador {
   oficina   Oficina @relation(fields: [oficinaId], references: [id], onDelete: Cascade)
 
   clientes Cliente[]
+
+  documentosSubidos Documento[]
 }
 
 model Cliente {
@@ -106,5 +108,37 @@ model Cliente {
   trabajadorId String?
   trabajador   Trabajador? @relation(fields: [trabajadorId], references: [id], onDelete: SetNull)
 
+  documentos Documento[]
+
   @@index([trabajadorId])
+}
+
+model Documento {
+  id        String   @id @default(cuid())
+  nombre    String
+  nombreArchivo String
+  tipo      String
+  estado    EstadoDocumento @default(PENDIENTE)
+  rutaArchivo String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  subidoPorUsuarioId String
+  subidoPorUsuario   Usuario @relation(fields: [subidoPorUsuarioId], references: [id], onDelete: Restrict)
+
+  @@index([clienteId])
+  @@index([subidoPorUsuarioId])
+  @@index([estado])
+}
+
+enum EstadoDocumento {
+  PENDIENTE
+  RECIBIDO
+  EN_REVISION
+  CORRECTO
+  FALTA_INFORMACION
 }
