@@ -1689,6 +1689,87 @@ app.get(
     }
   }
 );
+
+// Eliminar documento según permisos
+app.delete(
+  "/api/documentos/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Buscar documento
+      const documento = await prisma.documento.findUnique({
+        where: {
+          id
+        },
+        include: {
+          cliente: true
+        }
+      });
+
+      if (!documento) {
+        return res.status(404).json({
+          ok: false,
+          message: "Documento no encontrado"
+        });
+      }
+
+      // SUPERADMIN puede eliminar cualquier documento
+      if (req.usuario.rol === "SUPERADMIN") {
+        // Sin restricciones adicionales
+      }
+
+      // ADMIN solo puede eliminar documentos de clientes de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (documento.cliente.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede eliminar documentos de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede eliminar documentos de clientes de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          documento.cliente.empresaId !== req.usuario.empresaId ||
+          documento.cliente.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede eliminar documentos de otra oficina"
+          });
+        }
+      }
+
+      // Comprobar si el archivo físico existe
+      if (documento.rutaArchivo && fs.existsSync(documento.rutaArchivo)) {
+        fs.unlinkSync(documento.rutaArchivo);
+      }
+
+      // Eliminar registro de PostgreSQL
+      await prisma.documento.delete({
+        where: {
+          id
+        }
+      });
+
+      res.json({
+        ok: true,
+        message: "Documento eliminado correctamente"
+      });
+    } catch (error) {
+      console.error("Error eliminando documento:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
 // Login
 app.post("/api/login", async (req, res) => {
   try {
