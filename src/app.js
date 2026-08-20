@@ -723,9 +723,23 @@ app.get(
       }
 
       // TRABAJADOR puede ver únicamente sus clientes asignados
+// TRABAJADOR puede ver únicamente sus clientes asignados
 if (req.usuario.rol === "TRABAJADOR") {
+  const trabajador = await prisma.trabajador.findUnique({
+    where: {
+      usuarioId: req.usuario.id
+    }
+  });
+
+  if (!trabajador) {
+    return res.status(404).json({
+      ok: false,
+      message: "Trabajador no encontrado"
+    });
+  }
+
   where = {
-    trabajadorId: req.usuario.id
+    trabajadorId: trabajador.id
   };
 }
 
