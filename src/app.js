@@ -1189,6 +1189,107 @@ app.get(
   }
 );
 
+// Modificar los datos del cliente autenticado
+app.patch(
+  "/api/mi-cliente",
+  autenticarToken,
+  permitirRoles("CLIENTE"),
+  async (req, res) => {
+    try {
+      const { nombre, email, telefono } = req.body;
+
+      // Buscar cliente asociado al usuario autenticado
+      const cliente = await prisma.cliente.findUnique({
+        where: {
+          usuarioId: req.usuario.id
+        }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      // Comprobar que se quiere modificar al menos un dato
+      if (
+        nombre === undefined &&
+        email === undefined &&
+        telefono === undefined
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message: "Debes indicar al menos un dato para modificar"
+        });
+      }
+
+      // Si cambia el email, comprobar que no esté utilizado
+      if (email !== undefined && email !== cliente.email) {
+        const usuarioExistente = await prisma.usuario.findUnique({
+          where: {
+            email
+          }
+        });
+
+        if (usuarioExistente && usuarioExistente.id !== req.usuario.id) {
+          return res.status(400).json({
+            ok: false,
+            message: "El email ya está asociado a otro usuario"
+          });
+        }
+      }
+
+      const resultado = await prisma.$transaction(async (tx) => {
+        const clienteActualizado = await tx.cliente.update({
+          where: {
+            id: cliente.id
+          },
+          data: {
+            ...(nombre !== undefined && { nombre }),
+            ...(email !== undefined && { email }),
+            ...(telefono !== undefined && { telefono })
+          }
+        });
+
+        // Mantener sincronizado el Usuario
+        const usuarioActualizado = await tx.usuario.update({
+          where: {
+            id: req.usuario.id
+          },
+          data: {
+            ...(nombre !== undefined && { nombre }),
+            ...(email !== undefined && { email })
+          }
+        });
+
+        return {
+          cliente: clienteActualizado,
+          usuario: usuarioActualizado
+        };
+      });
+
+      res.json({
+        ok: true,
+        message: "Datos del cliente actualizados correctamente",
+        cliente: {
+          id: resultado.cliente.id,
+          nombre: resultado.cliente.nombre,
+          email: resultado.cliente.email,
+          telefono: resultado.cliente.telefono
+        }
+      });
+    } catch (error) {
+      console.error("Error modificando datos del cliente:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
