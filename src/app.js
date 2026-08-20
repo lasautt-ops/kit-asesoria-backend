@@ -1125,6 +1125,70 @@ app.patch(
   }
 );
 
+// Obtener los datos del cliente autenticado
+app.get(
+  "/api/mi-cliente",
+  autenticarToken,
+  permitirRoles("CLIENTE"),
+  async (req, res) => {
+    try {
+      const cliente = await prisma.cliente.findUnique({
+        where: {
+          usuarioId: req.usuario.id
+        },
+        include: {
+          empresa: true,
+          oficina: true,
+          trabajador: {
+            include: {
+              usuario: true
+            }
+          }
+        }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      res.json({
+        ok: true,
+        cliente: {
+          id: cliente.id,
+          nombre: cliente.nombre,
+          email: cliente.email,
+          telefono: cliente.telefono,
+          empresa: {
+            id: cliente.empresa.id,
+            nombre: cliente.empresa.nombre
+          },
+          oficina: {
+            id: cliente.oficina.id,
+            nombre: cliente.oficina.nombre
+          },
+          trabajador: cliente.trabajador
+            ? {
+                id: cliente.trabajador.id,
+                nombre: cliente.trabajador.usuario.nombre,
+                email: cliente.trabajador.usuario.email
+              }
+            : null
+        }
+      });
+    } catch (error) {
+      console.error("Error obteniendo datos del cliente:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
