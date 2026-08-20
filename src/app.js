@@ -1774,6 +1774,670 @@ app.delete(
     }
   }
 );
+
+// =====================================================
+// TAREAS
+// =====================================================
+
+// Crear tarea
+app.post(
+  "/api/tareas",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const {
+        titulo,
+        descripcion,
+        prioridad,
+        fechaLimite,
+        empresaId,
+        oficinaId,
+        clienteId,
+        asignadoAUsuarioId
+      } = req.body;
+
+      if (!titulo || !empresaId) {
+        return res.status(400).json({
+          ok: false,
+          message: "El título y la empresa son obligatorios"
+        });
+      }
+
+      // Buscar empresa
+      const empresa = await prisma.empresa.findUnique({
+        where: {
+          id: empresaId
+        }
+      });
+
+      if (!empresa) {
+        return res.status(404).json({
+          ok: false,
+          message: "Empresa no encontrada"
+        });
+      }
+
+      // ADMIN solo puede crear tareas en su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede crear tareas para otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede crear tareas en su empresa y oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede crear tareas para otra empresa"
+          });
+        }
+
+        if (oficinaId !== req.usuario.oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede crear tareas para otra oficina"
+          });
+        }
+      }
+
+      // Validar oficina si se indica
+      if (oficinaId) {
+        const oficina = await prisma.oficina.findFirst({
+          where: {
+            id: oficinaId,
+            empresaId
+          }
+        });
+
+        if (!oficina) {
+          return res.status(404).json({
+            ok: false,
+            message: "Oficina no encontrada o no pertenece a la empresa"
+          });
+        }
+      }
+
+      // Validar cliente si se indica
+      if (clienteId) {
+        const cliente = await prisma.cliente.findFirst({
+          where: {
+            id: clienteId,
+            empresaId,
+            ...(oficinaId ? { oficinaId } : {})
+          }
+        });
+
+        if (!cliente) {
+          return res.status(404).json({
+            ok: false,
+            message: "Cliente no encontrado o no pertenece al ámbito indicado"
+          });
+        }
+      }
+
+      // Validar usuario asignado si se indica
+      if (asignadoAUsuarioId) {
+        const usuarioAsignado = await prisma.usuario.findUnique({
+          where: {
+            id: asignadoAUsuarioId
+          }
+        });
+
+        if (!usuarioAsignado) {
+          return res.status(404).json({
+            ok: false,
+            message: "Usuario asignado no encontrado"
+          });
+        }
+
+        if (usuarioAsignado.rol !== "TRABAJADOR") {
+          return res.status(400).json({
+            ok: false,
+            message: "La tarea solo puede asignarse a un trabajador"
+          });
+        }
+
+        // ADMIN solo puede asignar trabajadores de su empresa
+        if (req.usuario.rol === "ADMIN") {
+          if (usuarioAsignado.empresaId !== req.usuario.empresaId) {
+            return res.status(403).json({
+              ok: false,
+              message: "El administrador no puede asignar tareas a trabajadores de otra empresa"
+            });
+          }
+        }
+
+        // DIRECTOR solo puede asignar trabajadores de su oficina
+        if (req.usuario.rol === "DIRECTOR") {
+          if (
+            usuarioAsignado.empresaId !== req.usuario.empresaId ||
+            usuarioAsignado.oficinaId !== req.usuario.oficinaId
+          ) {
+            return res.status(403).json({
+              ok: false,
+              message: "El director no puede asignar tareas a trabajadores de otra oficina"
+            });
+          }
+        }
+      }
+
+      const tarea = await prisma.tarea.create({
+        data: {
+          titulo,
+          descripcion: descripcion || null,
+          prioridad: prioridad || "MEDIA",
+          fechaLimite: fechaLimite
+            ? new Date(fechaLimite)
+            : null,
+          empresaId,
+          oficinaId: oficinaId || null,
+          clienteId: clienteId || null,
+          asignadoAUsuarioId: asignadoAUsuarioId || null,
+          creadoPorUsuarioId: req.usuario.id
+        }
+      });
+
+      res.status(201).json({
+        ok: true,
+        message: "Tarea creada correctamente",
+        tarea
+      });
+    } catch (error) {
+      console.error("Error creando tarea:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+// Obtener tareas según el rol
+app.get(
+  "/api/tareas",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  async (req, res) => {
+    try {
+      let where = {};
+
+      // SUPERADMIN puede ver todas las tareas
+      if (req.usuario.rol === "SUPERADMIN") {
+        where = {};
+      }
+
+      // ADMIN puede ver tareas de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        where = {
+          empresaId: req.usuario.empresaId
+        };
+      }
+
+      // DIRECTOR puede ver tareas de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        where = {
+          empresaId: req.usuario.empresaId,
+          oficinaId: req.usuario.oficinaId
+        };
+      }
+
+      // TRABAJADOR solo puede ver tareas asignadas a él
+      if (req.usuario.rol === "TRABAJADOR") {
+        where = {
+          asignadoAUsuarioId: req.usuario.id
+        };
+      }
+
+      const tareas = await prisma.tarea.findMany({
+        where,
+        orderBy: [
+          {
+            fechaLimite: "asc"
+          },
+          {
+            createdAt: "desc"
+          }
+        ],
+        include: {
+          empresa: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          oficina: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true
+            }
+          },
+          asignadoAUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          },
+          creadoPorUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          }
+        }
+      });
+
+      res.json({
+        ok: true,
+        tareas
+      });
+    } catch (error) {
+      console.error("Error obteniendo tareas:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+// Obtener una tarea por ID según permisos
+app.get(
+  "/api/tareas/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const tarea = await prisma.tarea.findUnique({
+        where: {
+          id
+        },
+        include: {
+          empresa: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          oficina: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true
+            }
+          },
+          asignadoAUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          },
+          creadoPorUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          }
+        }
+      });
+
+      if (!tarea) {
+        return res.status(404).json({
+          ok: false,
+          message: "Tarea no encontrada"
+        });
+      }
+
+      // ADMIN solo puede ver tareas de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (tarea.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede acceder a tareas de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede ver tareas de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          tarea.empresaId !== req.usuario.empresaId ||
+          tarea.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede acceder a tareas de otra oficina"
+          });
+        }
+      }
+
+      // TRABAJADOR solo puede ver tareas asignadas a él
+      if (req.usuario.rol === "TRABAJADOR") {
+        if (tarea.asignadoAUsuarioId !== req.usuario.id) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede acceder a esta tarea"
+          });
+        }
+      }
+
+      res.json({
+        ok: true,
+        tarea
+      });
+    } catch (error) {
+      console.error("Error obteniendo tarea:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+// Modificar tarea
+app.patch(
+  "/api/tareas/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const {
+        titulo,
+        descripcion,
+        estado,
+        prioridad,
+        fechaLimite,
+        oficinaId,
+        clienteId,
+        asignadoAUsuarioId
+      } = req.body;
+
+      const tarea = await prisma.tarea.findUnique({
+        where: {
+          id
+        }
+      });
+
+      if (!tarea) {
+        return res.status(404).json({
+          ok: false,
+          message: "Tarea no encontrada"
+        });
+      }
+
+      // Comprobar ámbito del usuario
+      if (req.usuario.rol === "ADMIN") {
+        if (tarea.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede modificar tareas de otra empresa"
+          });
+        }
+      }
+
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          tarea.empresaId !== req.usuario.empresaId ||
+          tarea.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede modificar tareas de otra oficina"
+          });
+        }
+      }
+
+      if (req.usuario.rol === "TRABAJADOR") {
+        if (tarea.asignadoAUsuarioId !== req.usuario.id) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede modificar esta tarea"
+          });
+        }
+
+        // El trabajador no puede cambiar la asignación
+        if (asignadoAUsuarioId !== undefined) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede cambiar el responsable de la tarea"
+          });
+        }
+      }
+
+      // Validar oficina si se modifica
+      if (oficinaId !== undefined && oficinaId !== null) {
+        const oficina = await prisma.oficina.findFirst({
+          where: {
+            id: oficinaId,
+            empresaId: tarea.empresaId
+          }
+        });
+
+        if (!oficina) {
+          return res.status(404).json({
+            ok: false,
+            message: "Oficina no encontrada o no pertenece a la empresa"
+          });
+        }
+
+        if (
+          req.usuario.rol === "DIRECTOR" &&
+          oficina.id !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede mover la tarea a otra oficina"
+          });
+        }
+      }
+
+      // Validar cliente si se modifica
+      if (clienteId !== undefined && clienteId !== null) {
+        const cliente = await prisma.cliente.findFirst({
+          where: {
+            id: clienteId,
+            empresaId: tarea.empresaId,
+            ...(oficinaId
+              ? { oficinaId }
+              : tarea.oficinaId
+                ? { oficinaId: tarea.oficinaId }
+                : {})
+          }
+        });
+
+        if (!cliente) {
+          return res.status(404).json({
+            ok: false,
+            message: "Cliente no encontrado o no pertenece al ámbito de la tarea"
+          });
+        }
+      }
+
+      // Validar nuevo responsable
+      if (asignadoAUsuarioId !== undefined && asignadoAUsuarioId !== null) {
+        const usuarioAsignado = await prisma.usuario.findUnique({
+          where: {
+            id: asignadoAUsuarioId
+          }
+        });
+
+        if (!usuarioAsignado) {
+          return res.status(404).json({
+            ok: false,
+            message: "Usuario asignado no encontrado"
+          });
+        }
+
+        if (usuarioAsignado.rol !== "TRABAJADOR") {
+          return res.status(400).json({
+            ok: false,
+            message: "La tarea solo puede asignarse a un trabajador"
+          });
+        }
+
+        if (req.usuario.rol === "ADMIN") {
+          if (usuarioAsignado.empresaId !== req.usuario.empresaId) {
+            return res.status(403).json({
+              ok: false,
+              message: "El administrador no puede asignar tareas a trabajadores de otra empresa"
+            });
+          }
+        }
+
+        if (req.usuario.rol === "DIRECTOR") {
+          if (
+            usuarioAsignado.empresaId !== req.usuario.empresaId ||
+            usuarioAsignado.oficinaId !== req.usuario.oficinaId
+          ) {
+            return res.status(403).json({
+              ok: false,
+              message: "El director no puede asignar tareas a trabajadores de otra oficina"
+            });
+          }
+        }
+      }
+
+      const tareaActualizada = await prisma.tarea.update({
+        where: {
+          id
+        },
+        data: {
+          ...(titulo !== undefined && { titulo }),
+          ...(descripcion !== undefined && { descripcion }),
+          ...(estado !== undefined && { estado }),
+          ...(prioridad !== undefined && { prioridad }),
+          ...(fechaLimite !== undefined && {
+            fechaLimite: fechaLimite
+              ? new Date(fechaLimite)
+              : null
+          }),
+          ...(oficinaId !== undefined && {
+            oficinaId: oficinaId || null
+          }),
+          ...(clienteId !== undefined && {
+            clienteId: clienteId || null
+          }),
+          ...(asignadoAUsuarioId !== undefined && {
+            asignadoAUsuarioId: asignadoAUsuarioId || null
+          })
+        }
+      });
+
+      res.json({
+        ok: true,
+        message: "Tarea actualizada correctamente",
+        tarea: tareaActualizada
+      });
+    } catch (error) {
+      console.error("Error modificando tarea:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+// Eliminar tarea
+app.delete(
+  "/api/tareas/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const tarea = await prisma.tarea.findUnique({
+        where: {
+          id
+        }
+      });
+
+      if (!tarea) {
+        return res.status(404).json({
+          ok: false,
+          message: "Tarea no encontrada"
+        });
+      }
+
+      // ADMIN solo puede eliminar tareas de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (tarea.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede eliminar tareas de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede eliminar tareas de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          tarea.empresaId !== req.usuario.empresaId ||
+          tarea.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede eliminar tareas de otra oficina"
+          });
+        }
+      }
+
+      await prisma.tarea.delete({
+        where: {
+          id
+        }
+      });
+
+      res.json({
+        ok: true,
+        message: "Tarea eliminada correctamente"
+      });
+    } catch (error) {
+      console.error("Error eliminando tarea:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
