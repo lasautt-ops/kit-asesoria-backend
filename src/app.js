@@ -1448,6 +1448,131 @@ app.post(
     }
   }
 );
+
+// Obtener documentos según el rol
+app.get(
+  "/api/documentos",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR", "CLIENTE"),
+  async (req, res) => {
+    try {
+      const { clienteId } = req.query;
+
+      let where = {};
+
+      // SUPERADMIN puede ver todos los documentos
+      if (req.usuario.rol === "SUPERADMIN") {
+        where = {};
+      }
+
+      // ADMIN puede ver documentos de clientes de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        where = {
+          cliente: {
+            empresaId: req.usuario.empresaId
+          }
+        };
+      }
+
+      // DIRECTOR puede ver documentos de clientes de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        where = {
+          cliente: {
+            empresaId: req.usuario.empresaId,
+            oficinaId: req.usuario.oficinaId
+          }
+        };
+      }
+
+      // TRABAJADOR puede ver documentos de sus clientes asignados
+      if (req.usuario.rol === "TRABAJADOR") {
+        const trabajador = await prisma.trabajador.findUnique({
+          where: {
+            usuarioId: req.usuario.id
+          }
+        });
+
+        if (!trabajador) {
+          return res.status(404).json({
+            ok: false,
+            message: "Trabajador no encontrado"
+          });
+        }
+
+        where = {
+          cliente: {
+            trabajadorId: trabajador.id
+          }
+        };
+      }
+
+      // CLIENTE solo puede ver sus propios documentos
+      if (req.usuario.rol === "CLIENTE") {
+        const cliente = await prisma.cliente.findUnique({
+          where: {
+            usuarioId: req.usuario.id
+          }
+        });
+
+        if (!cliente) {
+          return res.status(404).json({
+            ok: false,
+            message: "Cliente no encontrado"
+          });
+        }
+
+        where = {
+          clienteId: cliente.id
+        };
+      }
+
+      // Si se indica clienteId, añadimos el filtro
+      if (clienteId) {
+        where = {
+          ...where,
+          clienteId
+        };
+      }
+
+      const documentos = await prisma.documento.findMany({
+        where,
+        orderBy: {
+          createdAt: "desc"
+        },
+        select: {
+          id: true,
+          nombre: true,
+          nombreArchivo: true,
+          tipo: true,
+          estado: true,
+          createdAt: true,
+          updatedAt: true,
+          clienteId: true,
+          subidoPorUsuarioId: true,
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true
+            }
+          }
+        }
+      });
+
+      res.json({
+        ok: true,
+        documentos
+      });
+    } catch (error) {
+      console.error("Error obteniendo documentos:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
 // Login
 app.post("/api/login", async (req, res) => {
   try {
