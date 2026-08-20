@@ -26,6 +26,7 @@ model Empresa {
   trabajadores Trabajador[]
   clientes     Cliente[]
   usuarios     Usuario[]
+  tareas Tarea[]
 }
 
 model Oficina {
@@ -43,6 +44,8 @@ model Oficina {
   clientes      Cliente[]
 
   @@index([empresaId])
+
+  tareas Tarea[]
 }
 
 model Usuario {
@@ -68,6 +71,9 @@ model Usuario {
   @@index([empresaId])
   @@index([oficinaId])
   @@index([rol])
+
+  tareasAsignadas Tarea[] @relation("TareasAsignadas")
+  tareasCreadas   Tarea[] @relation("TareasCreadas")
 }
 
 model Trabajador {
@@ -111,6 +117,8 @@ model Cliente {
   documentos Documento[]
 
   @@index([trabajadorId])
+
+  tareas Tarea[]
 }
 
 model Documento {
@@ -141,4 +149,47 @@ enum EstadoDocumento {
   EN_REVISION
   CORRECTO
   FALTA_INFORMACION
+}
+
+model Tarea {
+  id                  String    @id @default(cuid())
+  titulo              String
+  descripcion         String?
+  estado              EstadoTarea @default(PENDIENTE)
+  prioridad            PrioridadTarea @default(MEDIA)
+  fechaLimite         DateTime?
+
+  empresaId           String
+  oficinaId           String?
+  clienteId           String?
+  asignadoAUsuarioId  String?
+  creadoPorUsuarioId  String
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  empresa             Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  oficina             Oficina?  @relation(fields: [oficinaId], references: [id], onDelete: SetNull)
+  cliente             Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  asignadoAUsuario    Usuario?  @relation("TareasAsignadas", fields: [asignadoAUsuarioId], references: [id], onDelete: SetNull)
+  creadoPorUsuario    Usuario   @relation("TareasCreadas", fields: [creadoPorUsuarioId], references: [id], onDelete: Restrict)
+
+  @@index([empresaId])
+  @@index([oficinaId])
+  @@index([clienteId])
+  @@index([asignadoAUsuarioId])
+  @@index([creadoPorUsuarioId])
+}
+
+enum EstadoTarea {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADA
+  CANCELADA
+}
+
+enum PrioridadTarea {
+  BAJA
+  MEDIA
+  ALTA
 }
