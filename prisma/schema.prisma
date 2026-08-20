@@ -63,6 +63,7 @@ model Usuario {
 
   trabajador Trabajador?
   cliente    Cliente?
+  documentosSubidos Documento[]
 
   @@index([empresaId])
   @@index([oficinaId])
@@ -85,7 +86,6 @@ model Trabajador {
 
   clientes Cliente[]
 
-  documentosSubidos Documento[]
 }
 
 model Cliente {
