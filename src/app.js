@@ -1526,13 +1526,17 @@ app.get(
         };
       }
 
-      // Si se indica clienteId, añadimos el filtro
-      if (clienteId) {
-        where = {
-          ...where,
-          clienteId
-        };
+      // Si se indica clienteId, se mantiene siempre la restricción del rol
+if (clienteId) {
+  where = {
+    AND: [
+      where,
+      {
+        clienteId
       }
+    ]
+  };
+}
 
       const documentos = await prisma.documento.findMany({
         where,
