@@ -743,6 +743,125 @@ app.get(
     }
   }
 );
+// Asignar cliente a un trabajador
+app.patch(
+  "/api/clientes/:id/asignar-trabajador",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { trabajadorId } = req.body;
+
+      if (!trabajadorId) {
+        return res.status(400).json({
+          ok: false,
+          message: "El trabajadorId es obligatorio"
+        });
+      }
+
+      // Buscar cliente
+      const cliente = await prisma.cliente.findUnique({
+        where: {
+          id
+        }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      // Buscar trabajador
+      const trabajador = await prisma.trabajador.findUnique({
+        where: {
+          id: trabajadorId
+        },
+        include: {
+          usuario: true
+        }
+      });
+
+      if (!trabajador) {
+        return res.status(404).json({
+          ok: false,
+          message: "Trabajador no encontrado"
+        });
+      }
+
+      // SUPERADMIN puede asignar cualquier cliente
+      // a cualquier trabajador
+      if (req.usuario.rol === "SUPERADMIN") {
+        // Sin restricciones adicionales
+      }
+
+      // ADMIN solo puede trabajar dentro de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (cliente.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede asignar clientes de otra empresa"
+          });
+        }
+
+        if (trabajador.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede asignar trabajadores de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede trabajar dentro de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          cliente.empresaId !== req.usuario.empresaId ||
+          cliente.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede asignar clientes de otra oficina"
+          });
+        }
+
+        if (
+          trabajador.empresaId !== req.usuario.empresaId ||
+          trabajador.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede asignar trabajadores de otra oficina"
+          });
+        }
+      }
+
+      // Asignar cliente al trabajador
+      const clienteActualizado = await prisma.cliente.update({
+        where: {
+          id
+        },
+        data: {
+          trabajadorId
+        }
+      });
+
+      res.json({
+        ok: true,
+        message: "Cliente asignado correctamente",
+        cliente: clienteActualizado
+      });
+    } catch (error) {
+      console.error("Error asignando cliente:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
 // Login
 app.post("/api/login", async (req, res) => {
   try {
