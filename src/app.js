@@ -697,7 +697,7 @@ app.post(
 app.get(
   "/api/clientes",
   autenticarToken,
-  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
   async (req, res) => {
     try {
       let where = {};
@@ -721,6 +721,13 @@ app.get(
           oficinaId: req.usuario.oficinaId
         };
       }
+
+      // TRABAJADOR puede ver únicamente sus clientes asignados
+if (req.usuario.rol === "TRABAJADOR") {
+  where = {
+    trabajadorId: req.usuario.id
+  };
+}
 
       const clientes = await prisma.cliente.findMany({
         where,
