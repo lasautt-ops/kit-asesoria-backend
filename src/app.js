@@ -883,6 +883,115 @@ app.patch(
     }
   }
 );
+// Modificar datos de un cliente
+app.patch(
+  "/api/clientes/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { nombre, email, telefono } = req.body;
+
+      // Buscar cliente
+      const cliente = await prisma.cliente.findUnique({
+        where: {
+          id
+        }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      // TRABAJADOR solo puede modificar sus clientes asignados
+      if (req.usuario.rol === "TRABAJADOR") {
+        const trabajador = await prisma.trabajador.findUnique({
+          where: {
+            usuarioId: req.usuario.id
+          }
+        });
+
+        if (!trabajador) {
+          return res.status(404).json({
+            ok: false,
+            message: "Trabajador no encontrado"
+          });
+        }
+
+        if (cliente.trabajadorId !== trabajador.id) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede modificar este cliente"
+          });
+        }
+      }
+
+      // ADMIN solo puede modificar clientes de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (cliente.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede modificar clientes de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede modificar clientes de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          cliente.empresaId !== req.usuario.empresaId ||
+          cliente.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede modificar clientes de otra oficina"
+          });
+        }
+      }
+
+      // Comprobar que al menos un dato se quiere modificar
+      if (
+        nombre === undefined &&
+        email === undefined &&
+        telefono === undefined
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message: "Debes indicar al menos un dato para modificar"
+        });
+      }
+
+      const clienteActualizado = await prisma.cliente.update({
+        where: {
+          id
+        },
+        data: {
+          ...(nombre !== undefined && { nombre }),
+          ...(email !== undefined && { email }),
+          ...(telefono !== undefined && { telefono })
+        }
+      });
+
+      res.json({
+        ok: true,
+        message: "Cliente actualizado correctamente",
+        cliente: clienteActualizado
+      });
+    } catch (error) {
+      console.error("Error modificando cliente:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
