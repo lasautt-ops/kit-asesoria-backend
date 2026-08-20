@@ -5,9 +5,35 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const autenticarToken = require("./middleware/auth");
 const permitirRoles = require("./middleware/roles");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
 const app = express();
 const prisma = new PrismaClient();
+
+const uploadsDir = path.join(process.cwd(), "uploads");
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+
+  filename: (req, file, cb) => {
+    const extension = path.extname(file.originalname);
+    const nombreUnico = `${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`;
+
+    cb(null, nombreUnico);
+  }
+});
+
+const upload = multer({
+  storage
+});
 
 app.use(cors());
 app.use(express.json());
@@ -1290,6 +1316,138 @@ app.patch(
   }
 );
 
+// Subir documento de un cliente
+app.post(
+  "/api/documentos",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR", "CLIENTE"),
+  upload.single("archivo"),
+  async (req, res) => {
+    try {
+      const {
+        clienteId,
+        nombre,
+        tipo
+      } = req.body;
+
+      if (!clienteId || !nombre || !tipo) {
+        return res.status(400).json({
+          ok: false,
+          message: "clienteId, nombre y tipo son obligatorios"
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          ok: false,
+          message: "El archivo es obligatorio"
+        });
+      }
+
+      // Buscar cliente
+      const cliente = await prisma.cliente.findUnique({
+        where: {
+          id: clienteId
+        }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      // CLIENTE solo puede subir documentos para sí mismo
+      if (req.usuario.rol === "CLIENTE") {
+        const clienteUsuario = await prisma.cliente.findUnique({
+          where: {
+            usuarioId: req.usuario.id
+          }
+        });
+
+        if (!clienteUsuario || clienteUsuario.id !== clienteId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente no puede subir documentos para otro cliente"
+          });
+        }
+      }
+
+      // TRABAJADOR solo puede subir documentos de sus clientes
+      if (req.usuario.rol === "TRABAJADOR") {
+        const trabajador = await prisma.trabajador.findUnique({
+          where: {
+            usuarioId: req.usuario.id
+          }
+        });
+
+        if (!trabajador) {
+          return res.status(404).json({
+            ok: false,
+            message: "Trabajador no encontrado"
+          });
+        }
+
+        if (cliente.trabajadorId !== trabajador.id) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede subir documentos para este cliente"
+          });
+        }
+      }
+
+      // ADMIN solo puede trabajar con clientes de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (cliente.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede subir documentos para clientes de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede trabajar con clientes de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          cliente.empresaId !== req.usuario.empresaId ||
+          cliente.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede subir documentos para clientes de otra oficina"
+          });
+        }
+      }
+
+      // Crear registro del documento
+      const documento = await prisma.documento.create({
+        data: {
+          nombre,
+          nombreArchivo: req.file.originalname,
+          tipo,
+          estado: "PENDIENTE",
+          rutaArchivo: req.file.path,
+          clienteId,
+          subidoPorUsuarioId: req.usuario.id
+        }
+      });
+
+      res.status(201).json({
+        ok: true,
+        message: "Documento subido correctamente",
+        documento
+      });
+    } catch (error) {
+      console.error("Error subiendo documento:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
 // Login
 app.post("/api/login", async (req, res) => {
   try {
