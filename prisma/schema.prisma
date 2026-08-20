@@ -82,6 +82,8 @@ model Trabajador {
 
   oficinaId String
   oficina   Oficina @relation(fields: [oficinaId], references: [id], onDelete: Cascade)
+
+  clientes Cliente[]
 }
 
 model Cliente {
@@ -100,4 +102,9 @@ model Cliente {
 
   oficinaId String
   oficina   Oficina @relation(fields: [oficinaId], references: [id], onDelete: Cascade)
+
+  trabajadorId String?
+  trabajador   Trabajador? @relation(fields: [trabajadorId], references: [id], onDelete: SetNull)
+
+  @@index([trabajadorId])
 }
