@@ -2043,21 +2043,37 @@ app.patch(
       }
 
       if (req.usuario.rol === "TRABAJADOR") {
-        if (tarea.asignadoAUsuarioId !== req.usuario.id) {
-          return res.status(403).json({
-            ok: false,
-            message: "El trabajador no puede modificar esta tarea"
-          });
-        }
+  if (tarea.asignadoAUsuarioId !== req.usuario.id) {
+    return res.status(403).json({
+      ok: false,
+      message: "El trabajador no puede modificar esta tarea"
+    });
+  }
 
-        // El trabajador no puede cambiar la asignación
-        if (asignadoAUsuarioId !== undefined) {
-          return res.status(403).json({
-            ok: false,
-            message: "El trabajador no puede cambiar el responsable de la tarea"
-          });
-        }
-      }
+  // El trabajador no puede cambiar el responsable
+  if (asignadoAUsuarioId !== undefined) {
+    return res.status(403).json({
+      ok: false,
+      message: "El trabajador no puede cambiar el responsable de la tarea"
+    });
+  }
+
+  // El trabajador no puede cambiar la oficina
+  if (oficinaId !== undefined) {
+    return res.status(403).json({
+      ok: false,
+      message: "El trabajador no puede cambiar la oficina de la tarea"
+    });
+  }
+
+  // El trabajador no puede cambiar el cliente
+  if (clienteId !== undefined) {
+    return res.status(403).json({
+      ok: false,
+      message: "El trabajador no puede cambiar el cliente de la tarea"
+    });
+  }
+}
 
       // Validar oficina si se modifica
       if (oficinaId !== undefined && oficinaId !== null) {
