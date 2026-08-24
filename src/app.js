@@ -617,6 +617,209 @@ app.get(
     }
   }
 );
+
+// Modificar trabajador
+app.patch(
+  "/api/trabajadores/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const {
+        nombre,
+        email,
+        password,
+        empresaId,
+        oficinaId,
+        activo
+      } = req.body;
+
+      const trabajador = await prisma.trabajador.findUnique({
+        where: {
+          id
+        },
+        include: {
+          usuario: true
+        }
+      });
+
+      if (!trabajador) {
+        return res.status(404).json({
+          ok: false,
+          message: "Trabajador no encontrado"
+        });
+      }
+
+      // Comprobar ámbito del usuario
+      if (req.usuario.rol === "ADMIN") {
+        if (trabajador.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede modificar trabajadores de otra empresa"
+          });
+        }
+      }
+
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          trabajador.empresaId !== req.usuario.empresaId ||
+          trabajador.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede modificar trabajadores de otra oficina"
+          });
+        }
+      }
+
+      const nuevaEmpresaId =
+        empresaId !== undefined ? empresaId : trabajador.empresaId;
+
+      const nuevaOficinaId =
+        oficinaId !== undefined ? oficinaId : trabajador.oficinaId;
+
+      // ADMIN no puede cambiar de empresa
+      if (
+        req.usuario.rol === "ADMIN" &&
+        nuevaEmpresaId !== req.usuario.empresaId
+      ) {
+        return res.status(403).json({
+          ok: false,
+          message: "El administrador no puede mover trabajadores a otra empresa"
+        });
+      }
+
+      // DIRECTOR no puede cambiar de empresa ni de oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (nuevaEmpresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede mover trabajadores a otra empresa"
+          });
+        }
+
+        if (nuevaOficinaId !== req.usuario.oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede mover trabajadores a otra oficina"
+          });
+        }
+      }
+
+      // Comprobar empresa
+      const empresa = await prisma.empresa.findUnique({
+        where: {
+          id: nuevaEmpresaId
+        }
+      });
+
+      if (!empresa) {
+        return res.status(404).json({
+          ok: false,
+          message: "Empresa no encontrada"
+        });
+      }
+
+      // Comprobar oficina
+      const oficina = await prisma.oficina.findFirst({
+        where: {
+          id: nuevaOficinaId,
+          empresaId: nuevaEmpresaId
+        }
+      });
+
+      if (!oficina) {
+        return res.status(404).json({
+          ok: false,
+          message: "Oficina no encontrada o no pertenece a la empresa"
+        });
+      }
+
+      // Comprobar email si se modifica
+      if (
+        email !== undefined &&
+        email !== trabajador.usuario.email
+      ) {
+        const usuarioExistente = await prisma.usuario.findUnique({
+          where: {
+            email
+          }
+        });
+
+        if (usuarioExistente && usuarioExistente.id !== trabajador.usuarioId) {
+          return res.status(409).json({
+            ok: false,
+            message: "El email ya está registrado"
+          });
+        }
+      }
+
+      const resultado = await prisma.$transaction(async (tx) => {
+        const datosUsuario = {
+          ...(nombre !== undefined && { nombre }),
+          ...(email !== undefined && { email }),
+          ...(activo !== undefined && { activo }),
+          empresaId: nuevaEmpresaId,
+          oficinaId: nuevaOficinaId,
+          ...(password !== undefined &&
+            password !== "" && {
+              password: await bcrypt.hash(password, 12)
+            })
+        };
+
+        const usuarioActualizado = await tx.usuario.update({
+          where: {
+            id: trabajador.usuarioId
+          },
+          data: datosUsuario
+        });
+
+        const trabajadorActualizado = await tx.trabajador.update({
+          where: {
+            id
+          },
+          data: {
+            empresaId: nuevaEmpresaId,
+            oficinaId: nuevaOficinaId
+          },
+          include: {
+            usuario: {
+              select: {
+                id: true,
+                nombre: true,
+                email: true,
+                rol: true,
+                activo: true,
+                createdAt: true,
+                updatedAt: true,
+                empresaId: true,
+                oficinaId: true
+              }
+            }
+          }
+        });
+
+        return trabajadorActualizado;
+      });
+
+      res.json({
+        ok: true,
+        message: "Trabajador actualizado correctamente",
+        trabajador: resultado
+      });
+    } catch (error) {
+      console.error("Error modificando trabajador:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Crear cliente
 app.post(
   "/api/clientes",
