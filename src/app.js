@@ -2005,7 +2005,7 @@ app.delete(
 app.get(
   "/api/tareas",
   autenticarToken,
-  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR", "CLIENTE"),
   async (req, res) => {
     try {
       let where = {};
@@ -2037,16 +2037,20 @@ app.get(
         };
       }
 
+      // CLIENTE solo puede ver sus propias tareas
+      if (req.usuario.rol === "CLIENTE") {
+        where = {
+          cliente: {
+            usuarioId: req.usuario.id
+          }
+        };
+      }
+
       const tareas = await prisma.tarea.findMany({
         where,
-        orderBy: [
-          {
-            fechaLimite: "asc"
-          },
-          {
-            createdAt: "desc"
-          }
-        ],
+        orderBy: {
+          createdAt: "desc"
+        },
         include: {
           empresa: {
             select: {
@@ -2100,7 +2104,6 @@ app.get(
     }
   }
 );
-
 // Obtener una tarea por ID según permisos
 app.get(
   "/api/tareas/:id",
