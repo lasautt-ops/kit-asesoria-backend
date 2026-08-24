@@ -2231,7 +2231,7 @@ app.get(
 app.patch(
   "/api/tareas/:id",
   autenticarToken,
-  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR", "CLIENTE"),
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -2250,6 +2250,9 @@ app.patch(
       const tarea = await prisma.tarea.findUnique({
         where: {
           id
+        },
+        include: {
+          cliente: true
         }
       });
 
@@ -2260,7 +2263,125 @@ app.patch(
         });
       }
 
-      // Comprobar ámbito del usuario
+      // =====================================================
+      // CLIENTE
+      // El cliente solo puede cambiar el estado de sus tareas
+      // =====================================================
+      if (req.usuario.rol === "CLIENTE") {
+        // Comprobar que la tarea pertenece al cliente
+        if (
+          !tarea.cliente ||
+          tarea.cliente.usuarioId !== req.usuario.id
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente no puede modificar tareas de otro cliente"
+          });
+        }
+
+        // El estado es obligatorio
+        if (estado === undefined) {
+          return res.status(400).json({
+            ok: false,
+            message: "El cliente solo puede modificar el estado de la tarea"
+          });
+        }
+
+        // El cliente no puede modificar ningún otro campo
+        const camposNoPermitidos = [
+          "titulo",
+          "descripcion",
+          "prioridad",
+          "fechaLimite",
+          "oficinaId",
+          "clienteId",
+          "asignadoAUsuarioId"
+        ];
+
+        const camposEnviados = Object.keys(req.body);
+
+        const campoNoPermitido = camposEnviados.find((campo) =>
+          camposNoPermitidos.includes(campo)
+        );
+
+        if (campoNoPermitido) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente solo puede modificar el estado de la tarea"
+          });
+        }
+
+        // Comprobar estado válido
+        const estadosPermitidos = [
+          "PENDIENTE",
+          "EN_PROCESO",
+          "COMPLETADA",
+          "CANCELADA"
+        ];
+
+        if (!estadosPermitidos.includes(estado)) {
+          return res.status(400).json({
+            ok: false,
+            message: "Estado de tarea no válido"
+          });
+        }
+
+        const tareaActualizada = await prisma.tarea.update({
+          where: {
+            id
+          },
+          data: {
+            estado
+          },
+          include: {
+            empresa: {
+              select: {
+                id: true,
+                nombre: true
+              }
+            },
+            oficina: {
+              select: {
+                id: true,
+                nombre: true
+              }
+            },
+            cliente: {
+              select: {
+                id: true,
+                nombre: true,
+                email: true
+              }
+            },
+            asignadoAUsuario: {
+              select: {
+                id: true,
+                nombre: true,
+                email: true,
+                rol: true
+              }
+            },
+            creadoPorUsuario: {
+              select: {
+                id: true,
+                nombre: true,
+                email: true,
+                rol: true
+              }
+            }
+          }
+        });
+
+        return res.json({
+          ok: true,
+          message: "Estado de la tarea actualizado correctamente",
+          tarea: tareaActualizada
+        });
+      }
+
+      // =====================================================
+      // COMPROBAR ÁMBITO DE ADMIN
+      // =====================================================
       if (req.usuario.rol === "ADMIN") {
         if (tarea.empresaId !== req.usuario.empresaId) {
           return res.status(403).json({
@@ -2270,6 +2391,9 @@ app.patch(
         }
       }
 
+      // =====================================================
+      // COMPROBAR ÁMBITO DE DIRECTOR
+      // =====================================================
       if (req.usuario.rol === "DIRECTOR") {
         if (
           tarea.empresaId !== req.usuario.empresaId ||
@@ -2282,155 +2406,96 @@ app.patch(
         }
       }
 
+      // =====================================================
+      // COMPROBAR ÁMBITO DE TRABAJADOR
+      // =====================================================
       if (req.usuario.rol === "TRABAJADOR") {
-  if (tarea.asignadoAUsuarioId !== req.usuario.id) {
-    return res.status(403).json({
-      ok: false,
-      message: "El trabajador no puede modificar esta tarea"
-    });
-  }
-
-  // El trabajador no puede cambiar el responsable
-  if (asignadoAUsuarioId !== undefined) {
-    return res.status(403).json({
-      ok: false,
-      message: "El trabajador no puede cambiar el responsable de la tarea"
-    });
-  }
-
-  // El trabajador no puede cambiar la oficina
-  if (oficinaId !== undefined) {
-    return res.status(403).json({
-      ok: false,
-      message: "El trabajador no puede cambiar la oficina de la tarea"
-    });
-  }
-
-  // El trabajador no puede cambiar el cliente
-  if (clienteId !== undefined) {
-    return res.status(403).json({
-      ok: false,
-      message: "El trabajador no puede cambiar el cliente de la tarea"
-    });
-  }
-}
-
-      // Validar oficina si se modifica
-      if (oficinaId !== undefined && oficinaId !== null) {
-        const oficina = await prisma.oficina.findFirst({
-          where: {
-            id: oficinaId,
-            empresaId: tarea.empresaId
-          }
-        });
-
-        if (!oficina) {
-          return res.status(404).json({
-            ok: false,
-            message: "Oficina no encontrada o no pertenece a la empresa"
-          });
-        }
-
-        if (
-          req.usuario.rol === "DIRECTOR" &&
-          oficina.id !== req.usuario.oficinaId
-        ) {
+        if (tarea.asignadoAUsuarioId !== req.usuario.id) {
           return res.status(403).json({
             ok: false,
-            message: "El director no puede mover la tarea a otra oficina"
+            message: "El trabajador no puede modificar tareas no asignadas a él"
           });
         }
       }
 
-      // Validar cliente si se modifica
-      if (clienteId !== undefined && clienteId !== null) {
-        const cliente = await prisma.cliente.findFirst({
-          where: {
-            id: clienteId,
-            empresaId: tarea.empresaId,
-            ...(oficinaId
-              ? { oficinaId }
-              : tarea.oficinaId
-                ? { oficinaId: tarea.oficinaId }
-                : {})
-          }
-        });
+      // =====================================================
+      // ACTUALIZACIÓN PARA SUPERADMIN / ADMIN / DIRECTOR / TRABAJADOR
+      // =====================================================
+      const datosActualizacion = {};
 
-        if (!cliente) {
-          return res.status(404).json({
-            ok: false,
-            message: "Cliente no encontrado o no pertenece al ámbito de la tarea"
-          });
-        }
+      if (titulo !== undefined) {
+        datosActualizacion.titulo = titulo;
       }
 
-      // Validar nuevo responsable
-      if (asignadoAUsuarioId !== undefined && asignadoAUsuarioId !== null) {
-        const usuarioAsignado = await prisma.usuario.findUnique({
-          where: {
-            id: asignadoAUsuarioId
-          }
-        });
+      if (descripcion !== undefined) {
+        datosActualizacion.descripcion = descripcion;
+      }
 
-        if (!usuarioAsignado) {
-          return res.status(404).json({
-            ok: false,
-            message: "Usuario asignado no encontrado"
-          });
-        }
+      if (estado !== undefined) {
+        datosActualizacion.estado = estado;
+      }
 
-        if (usuarioAsignado.rol !== "TRABAJADOR") {
-          return res.status(400).json({
-            ok: false,
-            message: "La tarea solo puede asignarse a un trabajador"
-          });
-        }
+      if (prioridad !== undefined) {
+        datosActualizacion.prioridad = prioridad;
+      }
 
-        if (req.usuario.rol === "ADMIN") {
-          if (usuarioAsignado.empresaId !== req.usuario.empresaId) {
-            return res.status(403).json({
-              ok: false,
-              message: "El administrador no puede asignar tareas a trabajadores de otra empresa"
-            });
-          }
-        }
+      if (fechaLimite !== undefined) {
+        datosActualizacion.fechaLimite = fechaLimite;
+      }
 
-        if (req.usuario.rol === "DIRECTOR") {
-          if (
-            usuarioAsignado.empresaId !== req.usuario.empresaId ||
-            usuarioAsignado.oficinaId !== req.usuario.oficinaId
-          ) {
-            return res.status(403).json({
-              ok: false,
-              message: "El director no puede asignar tareas a trabajadores de otra oficina"
-            });
-          }
-        }
+      if (oficinaId !== undefined) {
+        datosActualizacion.oficinaId = oficinaId;
+      }
+
+      if (clienteId !== undefined) {
+        datosActualizacion.clienteId = clienteId;
+      }
+
+      if (asignadoAUsuarioId !== undefined) {
+        datosActualizacion.asignadoAUsuarioId = asignadoAUsuarioId;
       }
 
       const tareaActualizada = await prisma.tarea.update({
         where: {
           id
         },
-        data: {
-          ...(titulo !== undefined && { titulo }),
-          ...(descripcion !== undefined && { descripcion }),
-          ...(estado !== undefined && { estado }),
-          ...(prioridad !== undefined && { prioridad }),
-          ...(fechaLimite !== undefined && {
-            fechaLimite: fechaLimite
-              ? new Date(fechaLimite)
-              : null
-          }),
-          ...(oficinaId !== undefined && {
-            oficinaId: oficinaId || null
-          }),
-          ...(clienteId !== undefined && {
-            clienteId: clienteId || null
-          }),
-          ...(asignadoAUsuarioId !== undefined && {
-            asignadoAUsuarioId: asignadoAUsuarioId || null
-          })
+        data: datosActualizacion,
+        include: {
+          empresa: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          oficina: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true
+            }
+          },
+          asignadoAUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          },
+          creadoPorUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          }
         }
       });
 
