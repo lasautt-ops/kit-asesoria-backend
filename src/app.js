@@ -1740,7 +1740,25 @@ if (clienteId) {
     ]
   };
 }
+      // CLIENTE solo puede ver sus propios documentos
+      if (req.usuario.rol === "CLIENTE") {
+        const cliente = await prisma.cliente.findUnique({
+          where: {
+            usuarioId: req.usuario.id
+          }
+        });
 
+        if (!cliente) {
+          return res.status(404).json({
+            ok: false,
+            message: "Cliente no encontrado"
+          });
+        }
+
+        where = {
+          clienteId: cliente.id
+        };
+      }
       const documentos = await prisma.documento.findMany({
         where,
         orderBy: {
