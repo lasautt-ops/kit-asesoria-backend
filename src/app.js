@@ -2108,7 +2108,7 @@ app.get(
 app.get(
   "/api/tareas/:id",
   autenticarToken,
-  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR", "CLIENTE"),
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -2134,7 +2134,8 @@ app.get(
             select: {
               id: true,
               nombre: true,
-              email: true
+              email: true,
+              usuarioId: true
             }
           },
           asignadoAUsuario: {
@@ -2168,7 +2169,7 @@ app.get(
         if (tarea.empresaId !== req.usuario.empresaId) {
           return res.status(403).json({
             ok: false,
-            message: "El administrador no puede acceder a tareas de otra empresa"
+            message: "El administrador no puede ver tareas de otra empresa"
           });
         }
       }
@@ -2181,7 +2182,7 @@ app.get(
         ) {
           return res.status(403).json({
             ok: false,
-            message: "El director no puede acceder a tareas de otra oficina"
+            message: "El director no puede ver tareas de otra oficina"
           });
         }
       }
@@ -2191,10 +2192,25 @@ app.get(
         if (tarea.asignadoAUsuarioId !== req.usuario.id) {
           return res.status(403).json({
             ok: false,
-            message: "El trabajador no puede acceder a esta tarea"
+            message: "El trabajador no puede ver tareas no asignadas a él"
           });
         }
       }
+
+      // CLIENTE solo puede ver sus propias tareas
+      if (req.usuario.rol === "CLIENTE") {
+        if (
+          !tarea.cliente ||
+          tarea.cliente.usuarioId !== req.usuario.id
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente no puede ver tareas de otro cliente"
+          });
+        }
+      }
+
+      // SUPERADMIN no tiene restricciones adicionales
 
       res.json({
         ok: true,
