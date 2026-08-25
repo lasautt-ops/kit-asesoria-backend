@@ -3325,6 +3325,218 @@ app.patch(
   }
 );
 
+// Obtener avisos del CLIENTE
+app.get(
+  "/api/cliente/avisos",
+  autenticarToken,
+  permitirRoles("CLIENTE"),
+  async (req, res) => {
+    try {
+      // Buscar el cliente asociado al usuario autenticado
+      const cliente = await prisma.cliente.findUnique({
+        where: {
+          usuarioId: req.usuario.id
+        }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      // Obtener únicamente avisos publicados de su empresa
+      // que estén dirigidos a TODOS o específicamente a este cliente
+      const avisos = await prisma.aviso.findMany({
+        where: {
+          empresaId: cliente.empresaId,
+          estado: "PUBLICADO",
+          OR: [
+            {
+              tipoDestinatario: "TODOS"
+            },
+            {
+              tipoDestinatario: "CLIENTES",
+              destinatarios: {
+                some: {
+                  clienteId: cliente.id
+                }
+              }
+            }
+          ]
+        },
+        include: {
+          creadoPorUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              rol: true
+            }
+          },
+          destinatarios: {
+            where: {
+              clienteId: cliente.id
+            },
+            select: {
+              id: true,
+              leido: true,
+              fechaLectura: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        }
+      });
+
+      const resultado = avisos.map((aviso) => {
+        const destinatario = aviso.destinatarios[0];
+
+        return {
+          id: aviso.id,
+          titulo: aviso.titulo,
+          contenido: aviso.contenido,
+          tipo: aviso.tipo,
+          prioridad: aviso.prioridad,
+          estado: aviso.estado,
+          tipoDestinatario: aviso.tipoDestinatario,
+          fechaPublicacion: aviso.fechaPublicacion,
+          fechaCaducidad: aviso.fechaCaducidad,
+          createdAt: aviso.createdAt,
+          creador: aviso.creadoPorUsuario,
+          leido: destinatario ? destinatario.leido : false,
+          fechaLectura: destinatario
+            ? destinatario.fechaLectura
+            : null
+        };
+      });
+
+      res.json({
+        ok: true,
+        avisos: resultado
+      });
+    } catch (error) {
+      console.error("Error obteniendo avisos del cliente:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
+// Marcar aviso del CLIENTE como leído
+app.patch(
+  "/api/cliente/avisos/:id/leido",
+  autenticarToken,
+  permitirRoles("CLIENTE"),
+  async (req, res) => {
+    try {
+      // Buscar el cliente asociado al usuario autenticado
+      const cliente = await prisma.cliente.findUnique({
+        where: {
+          usuarioId: req.usuario.id
+        }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      // Buscar el aviso
+      const aviso = await prisma.aviso.findUnique({
+        where: {
+          id: req.params.id
+        }
+      });
+
+      if (!aviso) {
+        return res.status(404).json({
+          ok: false,
+          message: "Aviso no encontrado"
+        });
+      }
+
+      // Solo se pueden marcar como leídos avisos publicados
+      if (aviso.estado !== "PUBLICADO") {
+        return res.status(400).json({
+          ok: false,
+          message: "El aviso no está publicado"
+        });
+      }
+
+      // El aviso debe pertenecer a la empresa del cliente
+      if (aviso.empresaId !== cliente.empresaId) {
+        return res.status(403).json({
+          ok: false,
+          message: "No tienes acceso a este aviso"
+        });
+      }
+
+      // Comprobar si el aviso está dirigido a TODOS
+      const esParaTodos = aviso.tipoDestinatario === "TODOS";
+
+      // Si no es para todos, comprobar que el cliente sea destinatario
+      if (!esParaTodos) {
+        const destinatario = await prisma.avisoCliente.findUnique({
+          where: {
+            avisoId_clienteId: {
+              avisoId: aviso.id,
+              clienteId: cliente.id
+            }
+          }
+        });
+
+        if (!destinatario) {
+          return res.status(403).json({
+            ok: false,
+            message: "No tienes acceso a este aviso"
+          });
+        }
+      }
+
+      // Crear o actualizar el registro de lectura
+      const avisoCliente = await prisma.avisoCliente.upsert({
+        where: {
+          avisoId_clienteId: {
+            avisoId: aviso.id,
+            clienteId: cliente.id
+          }
+        },
+        update: {
+          leido: true,
+          fechaLectura: new Date()
+        },
+        create: {
+          avisoId: aviso.id,
+          clienteId: cliente.id,
+          leido: true,
+          fechaLectura: new Date()
+        }
+      });
+
+      res.json({
+        ok: true,
+        message: "Aviso marcado como leído",
+        avisoCliente
+      });
+    } catch (error) {
+      console.error("Error marcando aviso como leído:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
