@@ -2736,6 +2736,238 @@ app.post(
   }
 );
 
+// Crear aviso
+app.post(
+  "/api/avisos",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const {
+        titulo,
+        contenido,
+        tipo,
+        prioridad,
+        tipoDestinatario,
+        fechaCaducidad,
+        clienteIds
+      } = req.body;
+
+      // Comprobar campos obligatorios
+      if (!titulo || !contenido) {
+        return res.status(400).json({
+          ok: false,
+          message: "El título y el contenido son obligatorios"
+        });
+      }
+
+      // Valores permitidos
+      const tiposPermitidos = [
+        "GENERAL",
+        "DOCUMENTACION",
+        "IMPORTANTE",
+        "PLAZO",
+        "INFORMACION"
+      ];
+
+      const prioridadesPermitidas = [
+        "NORMAL",
+        "ALTA",
+        "URGENTE"
+      ];
+
+      const destinatariosPermitidos = [
+        "TODOS",
+        "CLIENTES"
+      ];
+
+      if (tipo && !tiposPermitidos.includes(tipo)) {
+        return res.status(400).json({
+          ok: false,
+          message: "Tipo de aviso no válido"
+        });
+      }
+
+      if (prioridad && !prioridadesPermitidas.includes(prioridad)) {
+        return res.status(400).json({
+          ok: false,
+          message: "Prioridad de aviso no válida"
+        });
+      }
+
+      if (
+        tipoDestinatario &&
+        !destinatariosPermitidos.includes(tipoDestinatario)
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message: "Tipo de destinatario no válido"
+        });
+      }
+
+      const destinatarioFinal = tipoDestinatario || "CLIENTES";
+
+      // Si el aviso es para clientes concretos, debe existir una lista
+      if (
+        destinatarioFinal === "CLIENTES" &&
+        (!Array.isArray(clienteIds) || clienteIds.length === 0)
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message: "Debes indicar al menos un cliente destinatario"
+        });
+      }
+
+      // Si es un aviso para TODOS, no permitimos clienteIds
+      if (
+        destinatarioFinal === "TODOS" &&
+        Array.isArray(clienteIds) &&
+        clienteIds.length > 0
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message: "Un aviso para todos los clientes no debe incluir destinatarios individuales"
+        });
+      }
+
+      // Determinar empresa del aviso
+      let empresaId;
+
+      if (req.usuario.rol === "SUPERADMIN") {
+        empresaId = req.body.empresaId;
+
+        if (!empresaId) {
+          return res.status(400).json({
+            ok: false,
+            message: "Debes indicar la empresa del aviso"
+          });
+        }
+
+        const empresa = await prisma.empresa.findUnique({
+          where: {
+            id: empresaId
+          }
+        });
+
+        if (!empresa) {
+          return res.status(404).json({
+            ok: false,
+            message: "Empresa no encontrada"
+          });
+        }
+      } else {
+        empresaId = req.usuario.empresaId;
+
+        if (!empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El usuario no tiene una empresa asociada"
+          });
+        }
+      }
+
+      // Obtener clientes destinatarios y comprobar permisos
+      let clientes = [];
+
+      if (destinatarioFinal === "CLIENTES") {
+        const idsUnicos = [...new Set(clienteIds)];
+
+        clientes = await prisma.cliente.findMany({
+          where: {
+            id: {
+              in: idsUnicos
+            },
+            empresaId
+          }
+        });
+
+        if (clientes.length !== idsUnicos.length) {
+          return res.status(400).json({
+            ok: false,
+            message: "Uno o más clientes no pertenecen a la empresa indicada"
+          });
+        }
+
+        // DIRECTOR solo puede enviar avisos a clientes de su oficina
+        if (req.usuario.rol === "DIRECTOR") {
+          if (!req.usuario.oficinaId) {
+            return res.status(403).json({
+              ok: false,
+              message: "El director no tiene una oficina asociada"
+            });
+          }
+
+          const clienteFueraDeOficina = clientes.some(
+            (cliente) => cliente.oficinaId !== req.usuario.oficinaId
+          );
+
+          if (clienteFueraDeOficina) {
+            return res.status(403).json({
+              ok: false,
+              message: "No puedes enviar avisos a clientes de otra oficina"
+            });
+          }
+        }
+      }
+
+      const aviso = await prisma.$transaction(async (tx) => {
+        const nuevoAviso = await tx.aviso.create({
+          data: {
+            titulo: titulo.trim(),
+            contenido: contenido.trim(),
+            tipo: tipo || "GENERAL",
+            prioridad: prioridad || "NORMAL",
+            estado: "BORRADOR",
+            tipoDestinatario: destinatarioFinal,
+            fechaCaducidad: fechaCaducidad
+              ? new Date(fechaCaducidad)
+              : null,
+            empresaId,
+            creadoPorUsuarioId: req.usuario.id
+          }
+        });
+
+        if (destinatarioFinal === "CLIENTES") {
+          await tx.avisoCliente.createMany({
+            data: clientes.map((cliente) => ({
+              avisoId: nuevoAviso.id,
+              clienteId: cliente.id
+            }))
+          });
+        }
+
+        return nuevoAviso;
+      });
+
+      res.status(201).json({
+        ok: true,
+        message: "Aviso creado correctamente",
+        aviso: {
+          id: aviso.id,
+          titulo: aviso.titulo,
+          contenido: aviso.contenido,
+          tipo: aviso.tipo,
+          prioridad: aviso.prioridad,
+          estado: aviso.estado,
+          tipoDestinatario: aviso.tipoDestinatario,
+          fechaPublicacion: aviso.fechaPublicacion,
+          fechaCaducidad: aviso.fechaCaducidad,
+          empresaId: aviso.empresaId,
+          creadoPorUsuarioId: aviso.creadoPorUsuarioId,
+          createdAt: aviso.createdAt
+        }
+      });
+    } catch (error) {
+      console.error("Error creando aviso:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
