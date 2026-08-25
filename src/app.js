@@ -3553,6 +3553,778 @@ app.patch(
   }
 );
 
+
+// =====================================================
+// CALENDARIO / AGENDA
+// =====================================================
+
+// Obtener eventos del calendario según el rol
+app.get(
+  "/api/eventos-calendario",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR", "CLIENTE"),
+  async (req, res) => {
+    try {
+      let where = {};
+
+      // SUPERADMIN puede ver todos los eventos
+      if (req.usuario.rol === "SUPERADMIN") {
+        where = {};
+      }
+
+      // ADMIN puede ver todos los eventos de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        where = {
+          empresaId: req.usuario.empresaId
+        };
+      }
+
+      // DIRECTOR puede ver eventos de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        where = {
+          empresaId: req.usuario.empresaId,
+          oficinaId: req.usuario.oficinaId
+        };
+      }
+
+      // TRABAJADOR puede ver eventos de su oficina
+      if (req.usuario.rol === "TRABAJADOR") {
+        where = {
+          empresaId: req.usuario.empresaId,
+          oficinaId: req.usuario.oficinaId
+        };
+      }
+
+      // CLIENTE solo puede ver eventos relacionados con él
+      if (req.usuario.rol === "CLIENTE") {
+        where = {
+          cliente: {
+            usuarioId: req.usuario.id
+          }
+        };
+      }
+
+      const eventos = await prisma.eventoCalendario.findMany({
+        where,
+        orderBy: {
+          fechaInicio: "asc"
+        },
+        include: {
+          empresa: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          oficina: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true
+            }
+          },
+          creadoPorUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          }
+        }
+      });
+
+      res.json({
+        ok: true,
+        eventos
+      });
+    } catch (error) {
+      console.error("Error obteniendo eventos del calendario:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
+// Obtener un evento por ID según permisos
+app.get(
+  "/api/eventos-calendario/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR", "CLIENTE"),
+  async (req, res) => {
+    try {
+      const evento = await prisma.eventoCalendario.findUnique({
+        where: {
+          id: req.params.id
+        },
+        include: {
+          empresa: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          oficina: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              usuarioId: true
+            }
+          },
+          creadoPorUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          }
+        }
+      });
+
+      if (!evento) {
+        return res.status(404).json({
+          ok: false,
+          message: "Evento no encontrado"
+        });
+      }
+
+      // ADMIN solo puede ver eventos de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (evento.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede ver eventos de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede ver eventos de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          evento.empresaId !== req.usuario.empresaId ||
+          evento.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede ver eventos de otra oficina"
+          });
+        }
+      }
+
+      // TRABAJADOR solo puede ver eventos de su oficina
+      if (req.usuario.rol === "TRABAJADOR") {
+        if (
+          evento.empresaId !== req.usuario.empresaId ||
+          evento.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede ver eventos de otra oficina"
+          });
+        }
+      }
+
+      // CLIENTE solo puede ver eventos relacionados con él
+      if (req.usuario.rol === "CLIENTE") {
+        if (
+          !evento.cliente ||
+          evento.cliente.usuarioId !== req.usuario.id
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente no puede ver este evento"
+          });
+        }
+      }
+
+      res.json({
+        ok: true,
+        evento
+      });
+    } catch (error) {
+      console.error("Error obteniendo evento:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
+// Crear evento
+app.post(
+  "/api/eventos-calendario",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  async (req, res) => {
+    try {
+      const {
+        titulo,
+        descripcion,
+        tipo,
+        fechaInicio,
+        fechaFin,
+        todoElDia,
+        ubicacion,
+        estado,
+        empresaId,
+        oficinaId,
+        clienteId
+      } = req.body;
+
+      // Datos obligatorios
+      if (
+        !titulo ||
+        !empresaId ||
+        !fechaInicio ||
+        !fechaFin
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message: "El título, empresa, fecha de inicio y fecha de fin son obligatorios"
+        });
+      }
+
+      // Comprobar fechas
+      const inicio = new Date(fechaInicio);
+      const fin = new Date(fechaFin);
+
+      if (
+        Number.isNaN(inicio.getTime()) ||
+        Number.isNaN(fin.getTime())
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message: "Las fechas del evento no son válidas"
+        });
+      }
+
+      if (fin < inicio) {
+        return res.status(400).json({
+          ok: false,
+          message: "La fecha de fin no puede ser anterior a la fecha de inicio"
+        });
+      }
+
+      // Comprobar empresa
+      const empresa = await prisma.empresa.findUnique({
+        where: {
+          id: empresaId
+        }
+      });
+
+      if (!empresa) {
+        return res.status(404).json({
+          ok: false,
+          message: "Empresa no encontrada"
+        });
+      }
+
+      // ADMIN solo puede crear eventos en su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede crear eventos en otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede crear eventos en su empresa y oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede crear eventos en otra empresa"
+          });
+        }
+
+        if (oficinaId !== req.usuario.oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director solo puede crear eventos en su oficina"
+          });
+        }
+      }
+
+      // TRABAJADOR solo puede crear eventos en su empresa y oficina
+      if (req.usuario.rol === "TRABAJADOR") {
+        if (empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede crear eventos en otra empresa"
+          });
+        }
+
+        if (oficinaId !== req.usuario.oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador solo puede crear eventos en su oficina"
+          });
+        }
+      }
+
+      // Si se indica oficina, debe pertenecer a la empresa
+      if (oficinaId) {
+        const oficina = await prisma.oficina.findFirst({
+          where: {
+            id: oficinaId,
+            empresaId
+          }
+        });
+
+        if (!oficina) {
+          return res.status(404).json({
+            ok: false,
+            message: "Oficina no encontrada o no pertenece a la empresa"
+          });
+        }
+      }
+
+      // Si se indica cliente, debe pertenecer a la empresa
+      if (clienteId) {
+        const cliente = await prisma.cliente.findUnique({
+          where: {
+            id: clienteId
+          }
+        });
+
+        if (!cliente) {
+          return res.status(404).json({
+            ok: false,
+            message: "Cliente no encontrado"
+          });
+        }
+
+        if (cliente.empresaId !== empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente no pertenece a la empresa indicada"
+          });
+        }
+
+        // Si se indica oficina, el cliente debe pertenecer a ella
+        if (oficinaId && cliente.oficinaId !== oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El cliente no pertenece a la oficina indicada"
+          });
+        }
+
+        // DIRECTOR y TRABAJADOR solo pueden relacionar clientes
+        // de su propia oficina
+        if (
+          (req.usuario.rol === "DIRECTOR" ||
+            req.usuario.rol === "TRABAJADOR") &&
+          cliente.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "No puedes relacionar el evento con un cliente de otra oficina"
+          });
+        }
+      }
+
+      const evento = await prisma.eventoCalendario.create({
+        data: {
+          titulo,
+          descripcion: descripcion || null,
+          tipo: tipo || "OTRO",
+          fechaInicio: inicio,
+          fechaFin: fin,
+          todoElDia: todoElDia || false,
+          ubicacion: ubicacion || null,
+          estado: estado || "PROGRAMADO",
+          empresaId,
+          oficinaId: oficinaId || null,
+          clienteId: clienteId || null,
+          creadoPorUsuarioId: req.usuario.id
+        },
+        include: {
+          empresa: true,
+          oficina: true,
+          cliente: true,
+          creadoPorUsuario: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              rol: true
+            }
+          }
+        }
+      });
+
+      res.status(201).json({
+        ok: true,
+        message: "Evento creado correctamente",
+        evento
+      });
+    } catch (error) {
+      console.error("Error creando evento:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
+// Modificar evento
+app.patch(
+  "/api/eventos-calendario/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  async (req, res) => {
+    try {
+      const evento = await prisma.eventoCalendario.findUnique({
+        where: {
+          id: req.params.id
+        }
+      });
+
+      if (!evento) {
+        return res.status(404).json({
+          ok: false,
+          message: "Evento no encontrado"
+        });
+      }
+
+      // ADMIN solo puede modificar eventos de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (evento.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede modificar eventos de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede modificar eventos de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          evento.empresaId !== req.usuario.empresaId ||
+          evento.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede modificar eventos de otra oficina"
+          });
+        }
+      }
+
+      // TRABAJADOR solo puede modificar eventos de su oficina
+      if (req.usuario.rol === "TRABAJADOR") {
+        if (
+          evento.empresaId !== req.usuario.empresaId ||
+          evento.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede modificar eventos de otra oficina"
+          });
+        }
+      }
+
+      const {
+        titulo,
+        descripcion,
+        tipo,
+        fechaInicio,
+        fechaFin,
+        todoElDia,
+        ubicacion,
+        estado,
+        oficinaId,
+        clienteId
+      } = req.body;
+
+      const datosActualizacion = {};
+
+      if (titulo !== undefined) {
+        datosActualizacion.titulo = titulo;
+      }
+
+      if (descripcion !== undefined) {
+        datosActualizacion.descripcion = descripcion;
+      }
+
+      if (tipo !== undefined) {
+        datosActualizacion.tipo = tipo;
+      }
+
+      if (fechaInicio !== undefined) {
+        const nuevaFechaInicio = new Date(fechaInicio);
+
+        if (Number.isNaN(nuevaFechaInicio.getTime())) {
+          return res.status(400).json({
+            ok: false,
+            message: "La fecha de inicio no es válida"
+          });
+        }
+
+        datosActualizacion.fechaInicio = nuevaFechaInicio;
+      }
+
+      if (fechaFin !== undefined) {
+        const nuevaFechaFin = new Date(fechaFin);
+
+        if (Number.isNaN(nuevaFechaFin.getTime())) {
+          return res.status(400).json({
+            ok: false,
+            message: "La fecha de fin no es válida"
+          });
+        }
+
+        datosActualizacion.fechaFin = nuevaFechaFin;
+      }
+
+      if (
+        datosActualizacion.fechaInicio &&
+        datosActualizacion.fechaFin &&
+        datosActualizacion.fechaFin < datosActualizacion.fechaInicio
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message: "La fecha de fin no puede ser anterior a la fecha de inicio"
+        });
+      }
+
+      if (todoElDia !== undefined) {
+        datosActualizacion.todoElDia = todoElDia;
+      }
+
+      if (ubicacion !== undefined) {
+        datosActualizacion.ubicacion = ubicacion;
+      }
+
+      if (estado !== undefined) {
+        datosActualizacion.estado = estado;
+      }
+
+      // Si se cambia la oficina, comprobar permisos y pertenencia
+      if (oficinaId !== undefined) {
+        const oficina = await prisma.oficina.findFirst({
+          where: {
+            id: oficinaId,
+            empresaId: evento.empresaId
+          }
+        });
+
+        if (!oficina) {
+          return res.status(404).json({
+            ok: false,
+            message: "Oficina no encontrada o no pertenece a la empresa"
+          });
+        }
+
+        if (
+          (req.usuario.rol === "DIRECTOR" ||
+            req.usuario.rol === "TRABAJADOR") &&
+          oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "No puedes mover el evento a otra oficina"
+          });
+        }
+
+        datosActualizacion.oficinaId = oficinaId;
+      }
+
+      // Si se cambia el cliente, comprobar pertenencia
+      if (clienteId !== undefined) {
+        if (clienteId === null) {
+          datosActualizacion.clienteId = null;
+        } else {
+          const cliente = await prisma.cliente.findUnique({
+            where: {
+              id: clienteId
+            }
+          });
+
+          if (!cliente) {
+            return res.status(404).json({
+              ok: false,
+              message: "Cliente no encontrado"
+            });
+          }
+
+          if (cliente.empresaId !== evento.empresaId) {
+            return res.status(403).json({
+              ok: false,
+              message: "El cliente no pertenece a la empresa del evento"
+            });
+          }
+
+          const oficinaFinal =
+            oficinaId !== undefined
+              ? oficinaId
+              : evento.oficinaId;
+
+          if (
+            oficinaFinal &&
+            cliente.oficinaId !== oficinaFinal
+          ) {
+            return res.status(403).json({
+              ok: false,
+              message: "El cliente no pertenece a la oficina del evento"
+            });
+          }
+
+          if (
+            (req.usuario.rol === "DIRECTOR" ||
+              req.usuario.rol === "TRABAJADOR") &&
+            cliente.oficinaId !== req.usuario.oficinaId
+          ) {
+            return res.status(403).json({
+              ok: false,
+              message: "No puedes relacionar el evento con un cliente de otra oficina"
+            });
+          }
+
+          datosActualizacion.clienteId = clienteId;
+        }
+      }
+
+      const eventoActualizado =
+        await prisma.eventoCalendario.update({
+          where: {
+            id: evento.id
+          },
+          data: datosActualizacion,
+          include: {
+            empresa: true,
+            oficina: true,
+            cliente: true,
+            creadoPorUsuario: {
+              select: {
+                id: true,
+                nombre: true,
+                email: true,
+                rol: true
+              }
+            }
+          }
+        });
+
+      res.json({
+        ok: true,
+        message: "Evento actualizado correctamente",
+        evento: eventoActualizado
+      });
+    } catch (error) {
+      console.error("Error modificando evento:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
+// Eliminar evento
+app.delete(
+  "/api/eventos-calendario/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
+  async (req, res) => {
+    try {
+      const evento = await prisma.eventoCalendario.findUnique({
+        where: {
+          id: req.params.id
+        }
+      });
+
+      if (!evento) {
+        return res.status(404).json({
+          ok: false,
+          message: "Evento no encontrado"
+        });
+      }
+
+      // ADMIN solo puede eliminar eventos de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (evento.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede eliminar eventos de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede eliminar eventos de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          evento.empresaId !== req.usuario.empresaId ||
+          evento.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede eliminar eventos de otra oficina"
+          });
+        }
+      }
+
+      // TRABAJADOR solo puede eliminar eventos de su oficina
+      if (req.usuario.rol === "TRABAJADOR") {
+        if (
+          evento.empresaId !== req.usuario.empresaId ||
+          evento.oficinaId !== req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El trabajador no puede eliminar eventos de otra oficina"
+          });
+        }
+      }
+
+      await prisma.eventoCalendario.delete({
+        where: {
+          id: evento.id
+        }
+      });
+
+      res.json({
+        ok: true,
+        message: "Evento eliminado correctamente"
+      });
+    } catch (error) {
+      console.error("Error eliminando evento:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
