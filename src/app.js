@@ -3353,31 +3353,32 @@ app.get(
   empresaId: cliente.empresaId,
   estado: "PUBLICADO",
 
-  // El aviso debe estar vigente:
-  // - Sin fecha de caducidad
-  // - O con fecha de caducidad futura
-  fechaCaducidad: {
-    OR: [
-      {
-        equals: null
-      },
-      {
-        gt: new Date()
-      }
-    ]
-  },
-
   OR: [
     {
-      tipoDestinatario: "TODOS"
+      fechaCaducidad: null
     },
     {
-      tipoDestinatario: "CLIENTES",
-      destinatarios: {
-        some: {
-          clienteId: cliente.id
-        }
+      fechaCaducidad: {
+        gt: new Date()
       }
+    }
+  ],
+
+  AND: [
+    {
+      OR: [
+        {
+          tipoDestinatario: "TODOS"
+        },
+        {
+          tipoDestinatario: "CLIENTES",
+          destinatarios: {
+            some: {
+              clienteId: cliente.id
+            }
+          }
+        }
+      ]
     }
   ]
 },
