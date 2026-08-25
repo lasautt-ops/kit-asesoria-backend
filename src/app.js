@@ -3350,22 +3350,37 @@ app.get(
       // que estén dirigidos a TODOS o específicamente a este cliente
       const avisos = await prisma.aviso.findMany({
         where: {
-          empresaId: cliente.empresaId,
-          estado: "PUBLICADO",
-          OR: [
-            {
-              tipoDestinatario: "TODOS"
-            },
-            {
-              tipoDestinatario: "CLIENTES",
-              destinatarios: {
-                some: {
-                  clienteId: cliente.id
-                }
-              }
-            }
-          ]
-        },
+  empresaId: cliente.empresaId,
+  estado: "PUBLICADO",
+
+  // El aviso debe estar vigente:
+  // - Sin fecha de caducidad
+  // - O con fecha de caducidad futura
+  fechaCaducidad: {
+    OR: [
+      {
+        equals: null
+      },
+      {
+        gt: new Date()
+      }
+    ]
+  },
+
+  OR: [
+    {
+      tipoDestinatario: "TODOS"
+    },
+    {
+      tipoDestinatario: "CLIENTES",
+      destinatarios: {
+        some: {
+          clienteId: cliente.id
+        }
+      }
+    }
+  ]
+},
         include: {
           creadoPorUsuario: {
             select: {
