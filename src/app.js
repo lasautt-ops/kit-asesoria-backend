@@ -2968,6 +2968,156 @@ app.post(
   }
 );
 
+// Obtener avisos según el rol
+app.get(
+  "/api/avisos",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      let avisos;
+
+      // SUPERADMIN puede ver todos los avisos
+      if (req.usuario.rol === "SUPERADMIN") {
+        avisos = await prisma.aviso.findMany({
+          include: {
+            empresa: true,
+            creadoPorUsuario: {
+              select: {
+                id: true,
+                nombre: true,
+                email: true,
+                rol: true
+              }
+            },
+            destinatarios: {
+              include: {
+                cliente: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    email: true,
+                    empresaId: true,
+                    oficinaId: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: {
+            createdAt: "desc"
+          }
+        });
+      }
+
+      // ADMIN puede ver todos los avisos de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (!req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El usuario no tiene una empresa asociada"
+          });
+        }
+
+        avisos = await prisma.aviso.findMany({
+          where: {
+            empresaId: req.usuario.empresaId
+          },
+          include: {
+            empresa: true,
+            creadoPorUsuario: {
+              select: {
+                id: true,
+                nombre: true,
+                email: true,
+                rol: true
+              }
+            },
+            destinatarios: {
+              include: {
+                cliente: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    email: true,
+                    empresaId: true,
+                    oficinaId: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: {
+            createdAt: "desc"
+          }
+        });
+      }
+
+      // DIRECTOR puede ver los avisos destinados a clientes de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (!req.usuario.empresaId || !req.usuario.oficinaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no tiene empresa u oficina asociada"
+          });
+        }
+
+        avisos = await prisma.aviso.findMany({
+          where: {
+            empresaId: req.usuario.empresaId,
+            destinatarios: {
+              some: {
+                cliente: {
+                  oficinaId: req.usuario.oficinaId
+                }
+              }
+            }
+          },
+          include: {
+            empresa: true,
+            creadoPorUsuario: {
+              select: {
+                id: true,
+                nombre: true,
+                email: true,
+                rol: true
+              }
+            },
+            destinatarios: {
+              include: {
+                cliente: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    email: true,
+                    empresaId: true,
+                    oficinaId: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: {
+            createdAt: "desc"
+          }
+        });
+      }
+
+      res.json({
+        ok: true,
+        avisos
+      });
+    } catch (error) {
+      console.error("Error obteniendo avisos:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
