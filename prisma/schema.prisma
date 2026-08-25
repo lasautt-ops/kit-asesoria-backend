@@ -48,6 +48,7 @@ model Empresa {
   usuarios     Usuario[]
   tareas Tarea[]
   avisos Aviso[]
+  eventosCalendario EventoCalendario[]
 }
 
 model Oficina {
@@ -67,6 +68,7 @@ model Oficina {
   @@index([empresaId])
 
   tareas Tarea[]
+  eventosCalendario EventoCalendario[]
 }
 
 model Usuario {
@@ -97,6 +99,7 @@ model Usuario {
   tareasCreadas   Tarea[] @relation("TareasCreadas")
 
   avisosCreados Aviso[] @relation("AvisosCreados")
+  eventosCalendarioCreados EventoCalendario[]
 }
 
 model Trabajador {
@@ -143,6 +146,7 @@ model Cliente {
 
   tareas Tarea[]
   avisos AvisoCliente[]
+  eventosCalendario EventoCalendario[]
 }
 
 model Documento {
@@ -272,4 +276,51 @@ model AvisoCliente {
 enum TipoDestinatario {
   TODOS
   CLIENTES
+}
+
+model EventoCalendario {
+  id                String                  @id @default(cuid())
+  titulo            String
+  descripcion       String?
+  tipo              TipoEventoCalendario    @default(OTRO)
+  fechaInicio       DateTime
+  fechaFin          DateTime
+  todoElDia         Boolean                 @default(false)
+  ubicacion         String?
+  estado            EstadoEventoCalendario  @default(PROGRAMADO)
+
+  empresaId         String
+  oficinaId         String?
+  clienteId         String?
+  creadoPorUsuarioId String
+
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  empresa           Empresa                 @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  oficina           Oficina?                @relation(fields: [oficinaId], references: [id], onDelete: SetNull)
+  cliente           Cliente?                @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  creadoPorUsuario  Usuario                 @relation(fields: [creadoPorUsuarioId], references: [id], onDelete: Restrict)
+
+  @@index([empresaId])
+  @@index([oficinaId])
+  @@index([clienteId])
+  @@index([creadoPorUsuarioId])
+  @@index([fechaInicio])
+  @@index([estado])
+}
+
+enum TipoEventoCalendario {
+  CITA
+  REUNION
+  VENCIMIENTO
+  TAREA_PROGRAMADA
+  RECORDATORIO
+  OTRO
+}
+
+enum EstadoEventoCalendario {
+  PROGRAMADO
+  COMPLETADO
+  CANCELADO
 }
