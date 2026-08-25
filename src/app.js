@@ -3118,6 +3118,213 @@ app.get(
   }
 );
 
+// Publicar aviso
+app.patch(
+  "/api/avisos/:id/publicar",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const aviso = await prisma.aviso.findUnique({
+        where: {
+          id: req.params.id
+        },
+        include: {
+          destinatarios: {
+            include: {
+              cliente: true
+            }
+          }
+        }
+      });
+
+      if (!aviso) {
+        return res.status(404).json({
+          ok: false,
+          message: "Aviso no encontrado"
+        });
+      }
+
+      // SUPERADMIN puede publicar cualquier aviso
+      if (req.usuario.rol === "SUPERADMIN") {
+        // Sin restricciones adicionales
+      }
+
+      // ADMIN solo puede publicar avisos de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (aviso.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede publicar avisos de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede publicar avisos de clientes de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          aviso.empresaId !== req.usuario.empresaId ||
+          !req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede publicar este aviso"
+          });
+        }
+
+        const clientesFueraDeOficina = aviso.destinatarios.some(
+          (destinatario) =>
+            destinatario.cliente.oficinaId !== req.usuario.oficinaId
+        );
+
+        if (clientesFueraDeOficina) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede publicar avisos destinados a otra oficina"
+          });
+        }
+      }
+
+      if (aviso.estado === "PUBLICADO") {
+        return res.status(400).json({
+          ok: false,
+          message: "El aviso ya está publicado"
+        });
+      }
+
+      if (aviso.estado === "ARCHIVADO") {
+        return res.status(400).json({
+          ok: false,
+          message: "No se puede publicar un aviso archivado"
+        });
+      }
+
+      const avisoPublicado = await prisma.aviso.update({
+        where: {
+          id: aviso.id
+        },
+        data: {
+          estado: "PUBLICADO",
+          fechaPublicacion: new Date()
+        }
+      });
+
+      res.json({
+        ok: true,
+        message: "Aviso publicado correctamente",
+        aviso: avisoPublicado
+      });
+    } catch (error) {
+      console.error("Error publicando aviso:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
+// Archivar aviso
+app.patch(
+  "/api/avisos/:id/archivar",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const aviso = await prisma.aviso.findUnique({
+        where: {
+          id: req.params.id
+        },
+        include: {
+          destinatarios: {
+            include: {
+              cliente: true
+            }
+          }
+        }
+      });
+
+      if (!aviso) {
+        return res.status(404).json({
+          ok: false,
+          message: "Aviso no encontrado"
+        });
+      }
+
+      // SUPERADMIN puede archivar cualquier aviso
+      if (req.usuario.rol === "SUPERADMIN") {
+        // Sin restricciones adicionales
+      }
+
+      // ADMIN solo puede archivar avisos de su empresa
+      if (req.usuario.rol === "ADMIN") {
+        if (aviso.empresaId !== req.usuario.empresaId) {
+          return res.status(403).json({
+            ok: false,
+            message: "El administrador no puede archivar avisos de otra empresa"
+          });
+        }
+      }
+
+      // DIRECTOR solo puede archivar avisos de clientes de su oficina
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          aviso.empresaId !== req.usuario.empresaId ||
+          !req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede archivar este aviso"
+          });
+        }
+
+        const clientesFueraDeOficina = aviso.destinatarios.some(
+          (destinatario) =>
+            destinatario.cliente.oficinaId !== req.usuario.oficinaId
+        );
+
+        if (clientesFueraDeOficina) {
+          return res.status(403).json({
+            ok: false,
+            message: "El director no puede archivar avisos destinados a otra oficina"
+          });
+        }
+      }
+
+      if (aviso.estado === "ARCHIVADO") {
+        return res.status(400).json({
+          ok: false,
+          message: "El aviso ya está archivado"
+        });
+      }
+
+      const avisoArchivado = await prisma.aviso.update({
+        where: {
+          id: aviso.id
+        },
+        data: {
+          estado: "ARCHIVADO"
+        }
+      });
+
+      res.json({
+        ok: true,
+        message: "Aviso archivado correctamente",
+        aviso: avisoArchivado
+      });
+    } catch (error) {
+      console.error("Error archivando aviso:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Login
 app.post("/api/login", async (req, res) => {
   try {
