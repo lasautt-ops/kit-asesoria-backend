@@ -15,6 +15,26 @@ enum Rol {
   CLIENTE
 }
 
+enum TipoAviso {
+  GENERAL
+  DOCUMENTACION
+  IMPORTANTE
+  PLAZO
+  INFORMACION
+}
+
+enum PrioridadAviso {
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+enum EstadoAviso {
+  BORRADOR
+  PUBLICADO
+  ARCHIVADO
+}
+
 model Empresa {
   id        String   @id @default(cuid())
   nombre    String
@@ -27,6 +47,7 @@ model Empresa {
   clientes     Cliente[]
   usuarios     Usuario[]
   tareas Tarea[]
+  avisos Aviso[]
 }
 
 model Oficina {
@@ -74,6 +95,8 @@ model Usuario {
 
   tareasAsignadas Tarea[] @relation("TareasAsignadas")
   tareasCreadas   Tarea[] @relation("TareasCreadas")
+
+  avisosCreados Aviso[] @relation("AvisosCreados")
 }
 
 model Trabajador {
@@ -119,6 +142,7 @@ model Cliente {
   @@index([trabajadorId])
 
   tareas Tarea[]
+  avisos AvisoCliente[]
 }
 
 model Documento {
@@ -192,4 +216,60 @@ enum PrioridadTarea {
   BAJA
   MEDIA
   ALTA
+}
+
+model Aviso {
+  id               String          @id @default(cuid())
+  titulo           String
+  contenido        String
+  tipo             TipoAviso       @default(GENERAL)
+  prioridad        PrioridadAviso  @default(NORMAL)
+  estado           EstadoAviso     @default(BORRADOR)
+
+  tipoDestinatario TipoDestinatario @default(CLIENTES)
+
+  fechaPublicacion DateTime?
+  fechaCaducidad   DateTime?
+
+  empresaId        String
+  creadoPorUsuarioId String
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  empresa          Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  creadoPorUsuario Usuario         @relation("AvisosCreados", fields: [creadoPorUsuarioId], references: [id], onDelete: Restrict)
+
+  destinatarios    AvisoCliente[]
+
+  @@index([empresaId])
+  @@index([creadoPorUsuarioId])
+  @@index([estado])
+  @@index([fechaPublicacion])
+  @@index([fechaCaducidad])
+}
+
+model AvisoCliente {
+  id            String    @id @default(cuid())
+
+  avisoId       String
+  clienteId     String
+
+  leido         Boolean   @default(false)
+  fechaLectura  DateTime?
+
+  createdAt     DateTime  @default(now())
+
+  aviso         Aviso     @relation(fields: [avisoId], references: [id], onDelete: Cascade)
+  cliente       Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@unique([avisoId, clienteId])
+  @@index([avisoId])
+  @@index([clienteId])
+  @@index([clienteId, leido])
+}
+
+enum TipoDestinatario {
+  TODOS
+  CLIENTES
 }
