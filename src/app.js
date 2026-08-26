@@ -820,6 +820,51 @@ app.patch(
   }
 );
 
+// Obtener datos del cliente autenticado
+app.get(
+  "/api/cliente",
+  autenticarToken,
+  permitirRoles("CLIENTE"),
+  async (req, res) => {
+    try {
+      const cliente = await prisma.cliente.findUnique({
+        where: {
+          usuarioId: req.usuario.id
+        },
+        select: {
+          id: true,
+          nombre: true,
+          email: true,
+          telefono: true,
+          empresaId: true,
+          oficinaId: true,
+          trabajadorId: true
+        }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      res.json({
+        ok: true,
+        cliente
+      });
+    } catch (error) {
+      console.error("Error obteniendo cliente autenticado:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
 // Crear cliente
 app.post(
   "/api/clientes",
