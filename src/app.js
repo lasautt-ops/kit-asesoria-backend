@@ -1097,6 +1097,10 @@ app.post(
     try {
       const {
         nombre,
+        cif,
+        direccionFiscal,
+        administrador,
+        dniAdministrador,
         email,
         telefono,
         empresaId,
@@ -1169,6 +1173,10 @@ app.post(
       const cliente = await prisma.cliente.create({
         data: {
           nombre,
+          cif: cif || null,
+          direccionFiscal: direccionFiscal || null,
+          administrador: administrador || null,
+          dniAdministrador: dniAdministrador || null,
           email,
           telefono: telefono || null,
           empresaId,
