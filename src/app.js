@@ -171,7 +171,20 @@ app.get("/api/empresas/:id", async (req, res) => {
 app.put("/api/empresas/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre } = req.body;
+
+    const {
+      nombre,
+      cif,
+      direccion,
+      codigoPostal,
+      poblacion,
+      provincia,
+      nombreAdministrador,
+      emailAdministrador,
+      telefonoAdministrador,
+      web,
+      notas
+    } = req.body;
 
     if (!nombre) {
       return res.status(400).json({
@@ -180,12 +193,29 @@ app.put("/api/empresas/:id", async (req, res) => {
       });
     }
 
+    if (!cif) {
+      return res.status(400).json({
+        ok: false,
+        message: "El CIF de la empresa es obligatorio"
+      });
+    }
+
     const empresa = await prisma.empresa.update({
       where: {
         id
       },
       data: {
-        nombre
+        nombre,
+        cif,
+        direccion,
+        codigoPostal,
+        poblacion,
+        provincia,
+        nombreAdministrador,
+        emailAdministrador,
+        telefonoAdministrador,
+        web,
+        notas
       }
     });
 
