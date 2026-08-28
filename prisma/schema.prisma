@@ -64,6 +64,16 @@ model Empresa {
 model Oficina {
   id        String   @id @default(cuid())
   nombre    String
+
+  direccion          String?
+  codigoPostal       String?
+  poblacion          String?
+  provincia          String?
+  telefono           String?
+  email              String?
+  responsable        String?
+  notas              String?
+
   activo    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
