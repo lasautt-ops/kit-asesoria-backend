@@ -360,6 +360,80 @@ app.post(
     });
   }
 });
+
+// Editar oficina
+app.put(
+  "/api/oficinas/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const {
+        nombre,
+        direccion,
+        codigoPostal,
+        poblacion,
+        provincia,
+        telefono,
+        email,
+        responsable,
+        notas
+      } = req.body;
+
+      if (!nombre) {
+        return res.status(400).json({
+          ok: false,
+          message: "El nombre de la oficina es obligatorio"
+        });
+      }
+
+      const oficina = await prisma.oficina.update({
+        where: {
+          id
+        },
+        data: {
+          nombre,
+          direccion: direccion || null,
+          codigoPostal: codigoPostal || null,
+          poblacion: poblacion || null,
+          provincia: provincia || null,
+          telefono: telefono || null,
+          email: email || null,
+          responsable: responsable || null,
+          notas: notas || null
+        }
+      });
+
+      res.json({
+        ok: true,
+        oficina
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Error modificando oficina:",
+        error
+      );
+
+      if (error.code === "P2025") {
+        return res.status(404).json({
+          ok: false,
+          message: "Oficina no encontrada"
+        });
+      }
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
 // Listar oficinas de una empresa
 app.get("/api/empresas/:empresaId/oficinas", async (req, res) => {
   try {
