@@ -52,35 +52,65 @@ app.post(
   autenticarToken,
   permitirRoles("SUPERADMIN", "ADMIN"),
   async (req, res) => {
-  try {
-    const { nombre } = req.body;
+    try {
+      const {
+        nombre,
+        cif,
+        direccion,
+        codigoPostal,
+        poblacion,
+        provincia,
+        nombreAdministrador,
+        emailAdministrador,
+        telefonoAdministrador,
+        web,
+        notas
+      } = req.body;
 
-    if (!nombre) {
-      return res.status(400).json({
+      if (!nombre) {
+        return res.status(400).json({
+          ok: false,
+          message: "El nombre de la empresa es obligatorio"
+        });
+      }
+
+      if (!cif) {
+        return res.status(400).json({
+          ok: false,
+          message: "El CIF de la empresa es obligatorio"
+        });
+      }
+
+      const empresa = await prisma.empresa.create({
+        data: {
+          nombre,
+          cif,
+          direccion,
+          codigoPostal,
+          poblacion,
+          provincia,
+          nombreAdministrador,
+          emailAdministrador,
+          telefonoAdministrador,
+          web,
+          notas
+        }
+      });
+
+      res.status(201).json({
+        ok: true,
+        empresa
+      });
+    } catch (error) {
+      console.error("Error creando empresa:", error);
+
+      res.status(500).json({
         ok: false,
-        message: "El nombre de la empresa es obligatorio"
+        message: "Error interno del servidor"
       });
     }
-
-    const empresa = await prisma.empresa.create({
-      data: {
-        nombre
-      }
-    });
-
-    res.status(201).json({
-      ok: true,
-      empresa
-    });
-  } catch (error) {
-    console.error("Error creando empresa:", error);
-
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor"
-    });
   }
-});
+);
 // Listar empresas
 app.get("/api/empresas", autenticarToken, async (req, res) => {
   try {
