@@ -143,6 +143,10 @@ model Trabajador {
 model Cliente {
   id        String   @id @default(cuid())
   nombre    String
+  cif       String?
+  direccionFiscal String?
+  administrador String?
+  dniAdministrador String?
   email     String
   telefono  String?
   createdAt DateTime @default(now())
