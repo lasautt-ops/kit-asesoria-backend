@@ -1382,11 +1382,20 @@ if (req.usuario.rol === "TRABAJADOR") {
 }
 
       const clientes = await prisma.cliente.findMany({
-        where,
-        orderBy: {
-          createdAt: "desc"
-        }
-      });
+  where,
+  include: {
+    empresa: true,
+    oficina: true,
+    trabajador: {
+      include: {
+        usuario: true
+      }
+    }
+  },
+  orderBy: {
+    createdAt: "desc"
+  }
+});
 
       res.json({
         ok: true,
