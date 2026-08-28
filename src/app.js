@@ -317,49 +317,70 @@ app.post(
   autenticarToken,
   permitirRoles("SUPERADMIN"),
   async (req, res) => {
-  try {
-    const { nombre, empresaId } = req.body;
-
-    if (!nombre || !empresaId) {
-      return res.status(400).json({
-        ok: false,
-        message: "El nombre y la empresa son obligatorios"
-      });
-    }
-
-    const empresa = await prisma.empresa.findUnique({
-      where: {
-        id: empresaId
-      }
-    });
-
-    if (!empresa) {
-      return res.status(404).json({
-        ok: false,
-        message: "Empresa no encontrada"
-      });
-    }
-
-    const oficina = await prisma.oficina.create({
-      data: {
+    try {
+      const {
         nombre,
-        empresaId
+        empresaId,
+        direccion,
+        codigoPostal,
+        poblacion,
+        provincia,
+        telefono,
+        email,
+        responsable,
+        notas
+      } = req.body;
+
+      if (!nombre || !empresaId) {
+        return res.status(400).json({
+          ok: false,
+          message: "El nombre y la empresa son obligatorios"
+        });
       }
-    });
 
-    res.status(201).json({
-      ok: true,
-      oficina
-    });
-  } catch (error) {
-    console.error("Error creando oficina:", error);
+      const empresa = await prisma.empresa.findUnique({
+        where: {
+          id: empresaId
+        }
+      });
 
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor"
-    });
+      if (!empresa) {
+        return res.status(404).json({
+          ok: false,
+          message: "Empresa no encontrada"
+        });
+      }
+
+      const oficina = await prisma.oficina.create({
+        data: {
+          nombre,
+          direccion,
+          codigoPostal,
+          poblacion,
+          provincia,
+          telefono,
+          email,
+          responsable,
+          notas,
+          empresaId
+        }
+      });
+
+      res.status(201).json({
+        ok: true,
+        oficina
+      });
+
+    } catch (error) {
+      console.error("Error creando oficina:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
   }
-});
+);
 
 // Editar oficina
 app.put(
