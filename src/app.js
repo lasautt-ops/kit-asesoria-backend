@@ -400,6 +400,74 @@ app.get("/api/empresas/:empresaId/oficinas", async (req, res) => {
     });
   }
 });
+
+// Modificar una oficina
+app.put(
+  "/api/oficinas/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const {
+        nombre,
+        direccion,
+        codigoPostal,
+        poblacion,
+        provincia,
+        telefono,
+        email,
+        responsable,
+        notas
+      } = req.body;
+
+      if (!nombre) {
+        return res.status(400).json({
+          ok: false,
+          message: "El nombre de la oficina es obligatorio"
+        });
+      }
+
+      const oficina = await prisma.oficina.update({
+        where: {
+          id
+        },
+        data: {
+          nombre,
+          direccion,
+          codigoPostal,
+          poblacion,
+          provincia,
+          telefono,
+          email,
+          responsable,
+          notas
+        }
+      });
+
+      res.json({
+        ok: true,
+        oficina
+      });
+    } catch (error) {
+      console.error("Error modificando oficina:", error);
+
+      if (error.code === "P2025") {
+        return res.status(404).json({
+          ok: false,
+          message: "Oficina no encontrada"
+        });
+      }
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Desactivar una oficina
 app.patch(
   "/api/oficinas/:id/desactivar",
