@@ -653,7 +653,8 @@ app.post(
       email,
       password,
       empresaId,
-      oficinaId
+      oficinaId,
+      activo
     } = req.body;
 
         // Comprobar permisos según el rol
