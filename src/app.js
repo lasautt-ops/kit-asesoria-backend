@@ -865,6 +865,8 @@ app.patch(
 
       const {
         nombre,
+        apellidos,
+        dni,
         email,
         password,
         empresaId,
@@ -958,7 +960,7 @@ app.patch(
         });
       }
 
-      // Comprobar oficina
+      // Comprobar oficina y que pertenece a la empresa
       const oficina = await prisma.oficina.findFirst({
         where: {
           id: nuevaOficinaId,
@@ -984,7 +986,10 @@ app.patch(
           }
         });
 
-        if (usuarioExistente && usuarioExistente.id !== trabajador.usuarioId) {
+        if (
+          usuarioExistente &&
+          usuarioExistente.id !== trabajador.usuarioId
+        ) {
           return res.status(409).json({
             ok: false,
             message: "El email ya está registrado"
@@ -993,6 +998,7 @@ app.patch(
       }
 
       const resultado = await prisma.$transaction(async (tx) => {
+        // Datos de acceso y usuario
         const datosUsuario = {
           ...(nombre !== undefined && { nombre }),
           ...(email !== undefined && { email }),
@@ -1012,16 +1018,19 @@ app.patch(
           data: datosUsuario
         });
 
+        // Datos personales del trabajador
+        const datosTrabajador = {
+          ...(apellidos !== undefined && { apellidos }),
+          ...(dni !== undefined && { dni }),
+          empresaId: nuevaEmpresaId,
+          oficinaId: nuevaOficinaId
+        };
+
         const trabajadorActualizado = await tx.trabajador.update({
           where: {
             id
           },
-          data: {
-            ...(apellidos !== undefined && { apellidos }),
-            ...(dni !== undefined && { dni }),
-            empresaId: nuevaEmpresaId,
-            oficinaId: nuevaOficinaId
-          },
+          data: datosTrabajador,
           include: {
             usuario: {
               select: {
