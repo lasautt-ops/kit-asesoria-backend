@@ -127,6 +127,9 @@ model Trabajador {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  apellidos String
+  dni       String
+
   usuarioId String   @unique
   usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
@@ -137,7 +140,6 @@ model Trabajador {
   oficina   Oficina @relation(fields: [oficinaId], references: [id], onDelete: Cascade)
 
   clientes Cliente[]
-
 }
 
 model Cliente {
