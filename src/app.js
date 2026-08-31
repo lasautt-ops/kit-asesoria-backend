@@ -682,10 +682,18 @@ app.post(
       }
     }
 
-    if (!nombre || !email || !password || !empresaId || !oficinaId) {
+    if (
+      !nombre ||
+      !apellidos ||
+      !dni ||
+      !email ||
+      !password ||
+      !empresaId ||
+      !oficinaId
+    ) {
       return res.status(400).json({
         ok: false,
-        message: "Nombre, email, password, empresa y oficina son obligatorios"
+        message: "Nombre, apellidos, DNI, email, password, empresa y oficina son obligatorios"
       });
     }
 
