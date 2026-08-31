@@ -1017,6 +1017,8 @@ app.patch(
             id
           },
           data: {
+            ...(apellidos !== undefined && { apellidos }),
+            ...(dni !== undefined && { dni }),
             empresaId: nuevaEmpresaId,
             oficinaId: nuevaOficinaId
           },
