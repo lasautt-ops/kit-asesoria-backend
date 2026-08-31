@@ -832,6 +832,21 @@ app.get(
               empresaId: true,
               oficinaId: true
             }
+          },
+
+          empresa: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+
+          oficina: {
+            select: {
+              id: true,
+              nombre: true,
+              activo: true
+            }
           }
         },
         orderBy: {
