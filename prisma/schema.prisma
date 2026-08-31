@@ -127,8 +127,8 @@ model Trabajador {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  apellidos String
-  dni       String
+apellidos String @default("")
+dni       String @default("")
 
   usuarioId String   @unique
   usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
