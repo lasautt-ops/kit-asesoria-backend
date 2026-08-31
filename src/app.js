@@ -757,6 +757,8 @@ app.post(
 
       const trabajador = await tx.trabajador.create({
         data: {
+          apellidos,
+          dni,
           usuarioId: usuario.id,
           empresaId,
           oficinaId
