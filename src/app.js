@@ -648,6 +648,8 @@ app.post(
   try {
     const {
       nombre,
+      apellidos,
+      dni,
       email,
       password,
       empresaId,
