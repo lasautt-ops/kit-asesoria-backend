@@ -2136,7 +2136,9 @@ if (clienteId) {
             select: {
               id: true,
               nombre: true,
-              email: true
+              email: true,
+              empresaId: true,
+              oficinaId: true
             }
           }
         }
