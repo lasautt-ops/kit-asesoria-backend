@@ -3433,46 +3433,28 @@ app.post(
 app.get(
   "/api/avisos",
   autenticarToken,
-  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR", "TRABAJADOR"),
   async (req, res) => {
     try {
-      let avisos;
+      let where = {};
 
-      // SUPERADMIN puede ver todos los avisos
+      // =====================================================
+      // SUPERADMIN
+      // Ve todos los avisos
+      // =====================================================
+
       if (req.usuario.rol === "SUPERADMIN") {
-        avisos = await prisma.aviso.findMany({
-          include: {
-            empresa: true,
-            creadoPorUsuario: {
-              select: {
-                id: true,
-                nombre: true,
-                email: true,
-                rol: true
-              }
-            },
-            destinatarios: {
-              include: {
-                cliente: {
-                  select: {
-                    id: true,
-                    nombre: true,
-                    email: true,
-                    empresaId: true,
-                    oficinaId: true
-                  }
-                }
-              }
-            }
-          },
-          orderBy: {
-            createdAt: "desc"
-          }
-        });
+        where = {};
       }
 
-      // ADMIN puede ver todos los avisos de su empresa
+
+      // =====================================================
+      // ADMIN
+      // Ve únicamente los avisos de su empresa
+      // =====================================================
+
       if (req.usuario.rol === "ADMIN") {
+
         if (!req.usuario.empresaId) {
           return res.status(403).json({
             ok: false,
@@ -3480,62 +3462,101 @@ app.get(
           });
         }
 
-        avisos = await prisma.aviso.findMany({
-          where: {
-            empresaId: req.usuario.empresaId
-          },
-          include: {
-            empresa: true,
-            creadoPorUsuario: {
-              select: {
-                id: true,
-                nombre: true,
-                email: true,
-                rol: true
-              }
-            },
-            destinatarios: {
-              include: {
-                cliente: {
-                  select: {
-                    id: true,
-                    nombre: true,
-                    email: true,
-                    empresaId: true,
-                    oficinaId: true
-                  }
-                }
-              }
-            }
-          },
-          orderBy: {
-            createdAt: "desc"
-          }
-        });
+        where = {
+          empresaId: req.usuario.empresaId
+        };
+
       }
 
-      // DIRECTOR puede ver los avisos destinados a clientes de su oficina
+
+      // =====================================================
+      // DIRECTOR
+      // Ve únicamente los avisos de su oficina
+      //
+      // Incluye:
+      // - Avisos enviados a clientes de su oficina
+      // - Avisos destinados a TODOS dentro de su empresa
+      // =====================================================
+
       if (req.usuario.rol === "DIRECTOR") {
-        if (!req.usuario.empresaId || !req.usuario.oficinaId) {
+
+        if (
+          !req.usuario.empresaId ||
+          !req.usuario.oficinaId
+        ) {
           return res.status(403).json({
             ok: false,
             message: "El director no tiene empresa u oficina asociada"
           });
         }
 
-        avisos = await prisma.aviso.findMany({
-          where: {
-            empresaId: req.usuario.empresaId,
-            destinatarios: {
-              some: {
-                cliente: {
-                  oficinaId: req.usuario.oficinaId
+        where = {
+          empresaId: req.usuario.empresaId,
+          OR: [
+            {
+              tipoDestinatario: "TODOS"
+            },
+            {
+              destinatarios: {
+                some: {
+                  cliente: {
+                    oficinaId: req.usuario.oficinaId
+                  }
                 }
               }
             }
-          },
+          ]
+        };
+
+      }
+
+
+      // =====================================================
+      // TRABAJADOR
+      // Ve únicamente los avisos de sus clientes asignados
+      // =====================================================
+
+      if (req.usuario.rol === "TRABAJADOR") {
+
+        const trabajador =
+          await prisma.trabajador.findUnique({
+            where: {
+              usuarioId: req.usuario.id
+            }
+          });
+
+        if (!trabajador) {
+          return res.status(404).json({
+            ok: false,
+            message: "Trabajador no encontrado"
+          });
+        }
+
+        where = {
+          destinatarios: {
+            some: {
+              cliente: {
+                trabajadorId: trabajador.id
+              }
+            }
+          }
+        };
+
+      }
+
+
+      // =====================================================
+      // OBTENER AVISOS
+      // =====================================================
+
+      const avisos =
+        await prisma.aviso.findMany({
+          where,
+
           include: {
+
             empresa: true,
+
             creadoPorUsuario: {
               select: {
                 id: true,
@@ -3544,6 +3565,7 @@ app.get(
                 rol: true
               }
             },
+
             destinatarios: {
               include: {
                 cliente: {
@@ -3552,33 +3574,46 @@ app.get(
                     nombre: true,
                     email: true,
                     empresaId: true,
-                    oficinaId: true
+                    oficinaId: true,
+                    trabajadorId: true
                   }
                 }
               }
             }
+
           },
+
           orderBy: {
             createdAt: "desc"
           }
+
         });
-      }
+
+
+      // =====================================================
+      // RESPUESTA
+      // =====================================================
 
       res.json({
         ok: true,
         avisos
       });
+
     } catch (error) {
-      console.error("Error obteniendo avisos:", error);
+
+      console.error(
+        "Error obteniendo avisos:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message: "Error interno del servidor"
       });
+
     }
   }
 );
-
 // Publicar aviso
 app.patch(
   "/api/avisos/:id/publicar",
