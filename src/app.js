@@ -639,6 +639,507 @@ app.patch(
     });
   }
 });
+
+// ===============================
+// GESTIÓN DE USUARIOS
+// ===============================
+
+// Crear usuario
+app.post(
+  "/api/usuarios",
+  autenticarToken,
+  permitirRoles("SUPERADMIN"),
+  async (req, res) => {
+    try {
+      const {
+        nombre,
+        email,
+        password,
+        rol,
+        empresaId,
+        oficinaId,
+        apellidos,
+        dni,
+        activo
+      } = req.body;
+
+      // Solo se pueden crear estos roles desde Gestión de Usuarios
+      const rolesPermitidos = [
+        "ADMIN",
+        "DIRECTOR",
+        "TRABAJADOR"
+      ];
+
+      if (!rolesPermitidos.includes(rol)) {
+        return res.status(400).json({
+          ok: false,
+          message: "El rol debe ser ADMIN, DIRECTOR o TRABAJADOR"
+        });
+      }
+
+      // Datos básicos obligatorios
+      if (!nombre || !email || !password) {
+        return res.status(400).json({
+          ok: false,
+          message: "Nombre, email y contraseña son obligatorios"
+        });
+      }
+
+      // La contraseña debe tener al menos 8 caracteres
+      if (password.length < 8) {
+        return res.status(400).json({
+          ok: false,
+          message: "La contraseña debe tener al menos 8 caracteres"
+        });
+      }
+
+      // ADMIN necesita empresa, pero NO oficina
+      if (rol === "ADMIN") {
+        if (!empresaId) {
+          return res.status(400).json({
+            ok: false,
+            message: "La empresa es obligatoria para un ADMIN"
+          });
+        }
+
+        if (oficinaId) {
+          return res.status(400).json({
+            ok: false,
+            message: "Un ADMIN no puede estar asignado a una oficina"
+          });
+        }
+      }
+
+      // DIRECTOR necesita empresa y oficina
+      if (rol === "DIRECTOR") {
+        if (!empresaId || !oficinaId) {
+          return res.status(400).json({
+            ok: false,
+            message: "La empresa y la oficina son obligatorias para un DIRECTOR"
+          });
+        }
+      }
+
+      // TRABAJADOR necesita empresa y oficina
+      if (rol === "TRABAJADOR") {
+        if (!empresaId || !oficinaId) {
+          return res.status(400).json({
+            ok: false,
+            message: "La empresa y la oficina son obligatorias para un TRABAJADOR"
+          });
+        }
+
+        if (!apellidos || !dni) {
+          return res.status(400).json({
+            ok: false,
+            message: "Apellidos y DNI son obligatorios para un TRABAJADOR"
+          });
+        }
+      }
+
+      // Comprobar empresa cuando corresponda
+      let empresa = null;
+
+      if (empresaId) {
+        empresa = await prisma.empresa.findUnique({
+          where: {
+            id: empresaId
+          }
+        });
+
+        if (!empresa) {
+          return res.status(404).json({
+            ok: false,
+            message: "Empresa no encontrada"
+          });
+        }
+      }
+
+      // Comprobar oficina cuando corresponda
+      let oficina = null;
+
+      if (oficinaId) {
+        oficina = await prisma.oficina.findFirst({
+          where: {
+            id: oficinaId,
+            empresaId
+          }
+        });
+
+        if (!oficina) {
+          return res.status(404).json({
+            ok: false,
+            message: "La oficina no existe o no pertenece a la empresa seleccionada"
+          });
+        }
+      }
+
+      // Comprobar email
+      const usuarioExistente = await prisma.usuario.findUnique({
+        where: {
+          email
+        }
+      });
+
+      if (usuarioExistente) {
+        return res.status(409).json({
+          ok: false,
+          message: "El email ya está registrado"
+        });
+      }
+
+      // Encriptar contraseña
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      // Crear usuario
+      const resultado = await prisma.$transaction(async (tx) => {
+        const usuario = await tx.usuario.create({
+          data: {
+            nombre,
+            email,
+            password: passwordHash,
+            rol,
+            activo: activo !== undefined ? activo : true,
+            empresaId: empresaId || null,
+            oficinaId: oficinaId || null
+          }
+        });
+
+        // Solo los TRABAJADORES tienen registro Trabajador
+        if (rol === "TRABAJADOR") {
+          await tx.trabajador.create({
+            data: {
+              apellidos,
+              dni,
+              usuarioId: usuario.id,
+              empresaId,
+              oficinaId
+            }
+          });
+        }
+
+        return usuario;
+      });
+
+      res.status(201).json({
+        ok: true,
+        message: "Usuario creado correctamente",
+        usuario: {
+          id: resultado.id,
+          nombre: resultado.nombre,
+          email: resultado.email,
+          rol: resultado.rol,
+          activo: resultado.activo,
+          empresaId: resultado.empresaId,
+          oficinaId: resultado.oficinaId
+        }
+      });
+
+    } catch (error) {
+      console.error("Error creando usuario:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
+// Obtener usuarios
+app.get(
+  "/api/usuarios",
+  autenticarToken,
+  permitirRoles("SUPERADMIN"),
+  async (req, res) => {
+    try {
+      const usuarios = await prisma.usuario.findMany({
+        where: {
+          rol: {
+            in: [
+              "ADMIN",
+              "DIRECTOR",
+              "TRABAJADOR"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          nombre: true,
+          email: true,
+          rol: true,
+          activo: true,
+          createdAt: true,
+          updatedAt: true,
+          empresaId: true,
+          oficinaId: true,
+
+          empresa: {
+            select: {
+              id: true,
+              nombre: true
+            }
+          },
+
+          oficina: {
+            select: {
+              id: true,
+              nombre: true,
+              activo: true
+            }
+          },
+
+          trabajador: {
+            select: {
+              id: true,
+              apellidos: true,
+              dni: true
+            }
+          }
+        },
+
+        orderBy: {
+          createdAt: "desc"
+        }
+      });
+
+      res.json({
+        ok: true,
+        usuarios
+      });
+
+    } catch (error) {
+      console.error("Error obteniendo usuarios:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
+// Modificar usuario
+app.patch(
+  "/api/usuarios/:id",
+  autenticarToken,
+  permitirRoles("SUPERADMIN"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const {
+        nombre,
+        email,
+        password,
+        empresaId,
+        oficinaId,
+        activo,
+        apellidos,
+        dni
+      } = req.body;
+
+      const usuario = await prisma.usuario.findUnique({
+        where: {
+          id
+        },
+        include: {
+          trabajador: true
+        }
+      });
+
+      if (!usuario) {
+        return res.status(404).json({
+          ok: false,
+          message: "Usuario no encontrado"
+        });
+      }
+
+      // No permitimos modificar desde aquí usuarios CLIENTE
+      // ni SUPERADMIN
+      if (
+        usuario.rol !== "ADMIN" &&
+        usuario.rol !== "DIRECTOR" &&
+        usuario.rol !== "TRABAJADOR"
+      ) {
+        return res.status(403).json({
+          ok: false,
+          message: "Este usuario no puede gestionarse desde este apartado"
+        });
+      }
+
+      // En esta primera versión NO permitimos cambiar el rol
+      // para evitar inconsistencias entre Usuario y Trabajador.
+      if (req.body.rol !== undefined && req.body.rol !== usuario.rol) {
+        return res.status(400).json({
+          ok: false,
+          message: "El cambio de rol no está permitido desde este apartado"
+        });
+      }
+
+      const nuevaEmpresaId =
+        empresaId !== undefined
+          ? empresaId
+          : usuario.empresaId;
+
+      const nuevaOficinaId =
+        oficinaId !== undefined
+          ? oficinaId
+          : usuario.oficinaId;
+
+      // ADMIN
+      if (usuario.rol === "ADMIN") {
+        if (!nuevaEmpresaId) {
+          return res.status(400).json({
+            ok: false,
+            message: "La empresa es obligatoria para un ADMIN"
+          });
+        }
+
+        if (nuevaOficinaId) {
+          return res.status(400).json({
+            ok: false,
+            message: "Un ADMIN no puede estar asignado a una oficina"
+          });
+        }
+      }
+
+      // DIRECTOR y TRABAJADOR
+      if (
+        usuario.rol === "DIRECTOR" ||
+        usuario.rol === "TRABAJADOR"
+      ) {
+        if (!nuevaEmpresaId || !nuevaOficinaId) {
+          return res.status(400).json({
+            ok: false,
+            message: "La empresa y la oficina son obligatorias"
+          });
+        }
+      }
+
+      // Comprobar empresa
+      if (nuevaEmpresaId) {
+        const empresa = await prisma.empresa.findUnique({
+          where: {
+            id: nuevaEmpresaId
+          }
+        });
+
+        if (!empresa) {
+          return res.status(404).json({
+            ok: false,
+            message: "Empresa no encontrada"
+          });
+        }
+      }
+
+      // Comprobar oficina
+      if (nuevaOficinaId) {
+        const oficina = await prisma.oficina.findFirst({
+          where: {
+            id: nuevaOficinaId,
+            empresaId: nuevaEmpresaId
+          }
+        });
+
+        if (!oficina) {
+          return res.status(404).json({
+            ok: false,
+            message: "La oficina no existe o no pertenece a la empresa seleccionada"
+          });
+        }
+      }
+
+      // Comprobar email si cambia
+      if (
+        email !== undefined &&
+        email !== usuario.email
+      ) {
+        const usuarioExistente = await prisma.usuario.findUnique({
+          where: {
+            email
+          }
+        });
+
+        if (
+          usuarioExistente &&
+          usuarioExistente.id !== usuario.id
+        ) {
+          return res.status(409).json({
+            ok: false,
+            message: "El email ya está registrado"
+          });
+        }
+      }
+
+      const resultado = await prisma.$transaction(async (tx) => {
+        const datosUsuario = {
+          ...(nombre !== undefined && { nombre }),
+          ...(email !== undefined && { email }),
+          ...(activo !== undefined && { activo }),
+
+          empresaId: nuevaEmpresaId || null,
+          oficinaId: nuevaOficinaId || null,
+
+          ...(password !== undefined &&
+            password !== "" && {
+              password: await bcrypt.hash(password, 12)
+            })
+        };
+
+        const usuarioActualizado = await tx.usuario.update({
+          where: {
+            id
+          },
+          data: datosUsuario
+        });
+
+        // Si es trabajador, actualizar también sus datos específicos
+        if (usuario.rol === "TRABAJADOR") {
+          await tx.trabajador.update({
+            where: {
+              usuarioId: usuario.id
+            },
+            data: {
+              ...(apellidos !== undefined && { apellidos }),
+              ...(dni !== undefined && { dni }),
+              empresaId: nuevaEmpresaId,
+              oficinaId: nuevaOficinaId
+            }
+          });
+        }
+
+        return usuarioActualizado;
+      });
+
+      res.json({
+        ok: true,
+        message: "Usuario actualizado correctamente",
+        usuario: {
+          id: resultado.id,
+          nombre: resultado.nombre,
+          email: resultado.email,
+          rol: resultado.rol,
+          activo: resultado.activo,
+          empresaId: resultado.empresaId,
+          oficinaId: resultado.oficinaId
+        }
+      });
+
+    } catch (error) {
+      console.error("Error modificando usuario:", error);
+
+      res.status(500).json({
+        ok: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
 // Crear trabajador
 app.post(
   "/api/trabajadores",
