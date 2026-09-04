@@ -999,14 +999,61 @@ const rolAnterior = usuario.rol;
 const cambioDeRol = rolSolicitado !== rolAnterior;
 
       const nuevaEmpresaId =
-        empresaId !== undefined
-          ? empresaId
-          : usuario.empresaId;
+  empresaId !== undefined
+    ? empresaId
+    : usuario.empresaId;
 
-      const nuevaOficinaId =
-        oficinaId !== undefined
-          ? oficinaId
-          : usuario.oficinaId;
+let nuevaOficinaId =
+  oficinaId !== undefined
+    ? oficinaId
+    : usuario.oficinaId;
+
+// =====================================================
+// VALIDACIONES SEGÚN EL NUEVO ROL
+// =====================================================
+
+const nuevosApellidos =
+  apellidos !== undefined
+    ? apellidos
+    : usuario.trabajador?.apellidos || "";
+
+const nuevoDni =
+  dni !== undefined
+    ? dni
+    : usuario.trabajador?.dni || "";
+
+// ADMIN no puede tener oficina
+if (rolSolicitado === "ADMIN") {
+  nuevaOficinaId = null;
+}
+
+// DIRECTOR necesita empresa y oficina
+if (rolSolicitado === "DIRECTOR") {
+  if (!nuevaEmpresaId || !nuevaOficinaId) {
+    return res.status(400).json({
+      ok: false,
+      message: "La empresa y la oficina son obligatorias para un DIRECTOR"
+    });
+  }
+}
+
+// TRABAJADOR necesita empresa, oficina, apellidos y DNI
+if (rolSolicitado === "TRABAJADOR") {
+
+  if (!nuevaEmpresaId || !nuevaOficinaId) {
+    return res.status(400).json({
+      ok: false,
+      message: "La empresa y la oficina son obligatorias para un TRABAJADOR"
+    });
+  }
+
+  if (!nuevosApellidos || !nuevoDni) {
+    return res.status(400).json({
+      ok: false,
+      message: "Apellidos y DNI son obligatorios para un TRABAJADOR"
+    });
+  }
+}
 
       // ADMIN
       if (usuario.rol === "ADMIN") {
