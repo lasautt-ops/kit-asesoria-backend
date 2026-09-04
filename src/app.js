@@ -970,14 +970,33 @@ app.patch(
         });
       }
 
-      // En esta primera versión NO permitimos cambiar el rol
-      // para evitar inconsistencias entre Usuario y Trabajador.
-      if (req.body.rol !== undefined && req.body.rol !== usuario.rol) {
-        return res.status(400).json({
-          ok: false,
-          message: "El cambio de rol no está permitido desde este apartado"
-        });
-      }
+// =====================================================
+// CAMBIO DE ROL
+// Solo SUPERADMIN puede cambiar el rol.
+// Las rutas ya están protegidas mediante
+// permitirRoles("SUPERADMIN").
+// =====================================================
+
+const rolSolicitado =
+  req.body.rol !== undefined
+    ? req.body.rol
+    : usuario.rol;
+
+const rolesPermitidos = [
+  "ADMIN",
+  "DIRECTOR",
+  "TRABAJADOR"
+];
+
+if (!rolesPermitidos.includes(rolSolicitado)) {
+  return res.status(400).json({
+    ok: false,
+    message: "El rol debe ser ADMIN, DIRECTOR o TRABAJADOR"
+  });
+}
+
+const rolAnterior = usuario.rol;
+const cambioDeRol = rolSolicitado !== rolAnterior;
 
       const nuevaEmpresaId =
         empresaId !== undefined
