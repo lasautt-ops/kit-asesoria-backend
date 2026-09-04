@@ -1141,26 +1141,91 @@ if (rolSolicitado === "TRABAJADOR") {
       }
 
       const resultado = await prisma.$transaction(async (tx) => {
-        const datosUsuario = {
-          ...(nombre !== undefined && { nombre }),
-          ...(email !== undefined && { email }),
-          ...(activo !== undefined && { activo }),
 
-          empresaId: nuevaEmpresaId || null,
-          oficinaId: nuevaOficinaId || null,
+  const datosUsuario = {
+    ...(nombre !== undefined && { nombre }),
+    ...(email !== undefined && { email }),
+    ...(activo !== undefined && { activo }),
 
-          ...(password !== undefined &&
-            password !== "" && {
-              password: await bcrypt.hash(password, 12)
-            })
-        };
+    rol: rolSolicitado,
 
-        const usuarioActualizado = await tx.usuario.update({
-          where: {
-            id
-          },
-          data: datosUsuario
-        });
+    empresaId: nuevaEmpresaId || null,
+    oficinaId: nuevaOficinaId || null,
+
+    ...(password !== undefined &&
+      password !== "" && {
+        password: await bcrypt.hash(password, 12)
+      })
+  };
+
+  const usuarioActualizado = await tx.usuario.update({
+    where: {
+      id
+    },
+    data: datosUsuario
+  });
+
+
+  // =====================================================
+  // CAMBIO DESDE TRABAJADOR A OTRO ROL
+  // =====================================================
+
+  if (
+    rolAnterior === "TRABAJADOR" &&
+    rolSolicitado !== "TRABAJADOR"
+  ) {
+
+    await tx.trabajador.deleteMany({
+      where: {
+        usuarioId: usuario.id
+      }
+    });
+  }
+
+
+  // =====================================================
+  // CAMBIO HACIA TRABAJADOR
+  // =====================================================
+
+  if (
+    rolSolicitado === "TRABAJADOR"
+  ) {
+
+    if (usuario.trabajador) {
+
+      // Ya existe Trabajador → actualizarlo
+
+      await tx.trabajador.update({
+        where: {
+          usuarioId: usuario.id
+        },
+        data: {
+          apellidos: nuevosApellidos,
+          dni: nuevoDni,
+          empresaId: nuevaEmpresaId,
+          oficinaId: nuevaOficinaId
+        }
+      });
+
+    } else {
+
+      // No existe Trabajador → crearlo
+
+      await tx.trabajador.create({
+        data: {
+          apellidos: nuevosApellidos,
+          dni: nuevoDni,
+          usuarioId: usuario.id,
+          empresaId: nuevaEmpresaId,
+          oficinaId: nuevaOficinaId
+        }
+      });
+    }
+  }
+
+
+  return usuarioActualizado;
+});
 
         // Si es trabajador, actualizar también sus datos específicos
         if (usuario.rol === "TRABAJADOR") {
