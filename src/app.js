@@ -938,7 +938,8 @@ app.patch(
         oficinaId,
         activo,
         apellidos,
-        dni
+        dni,
+        rol
       } = req.body;
 
       const usuario = await prisma.usuario.findUnique({
@@ -970,77 +971,117 @@ app.patch(
         });
       }
 
-// =====================================================
-// CAMBIO DE ROL
-// Solo SUPERADMIN puede cambiar el rol.
-// Las rutas ya están protegidas mediante
-// permitirRoles("SUPERADMIN").
-// =====================================================
 
-const rolSolicitado =
-  req.body.rol !== undefined
-    ? req.body.rol
-    : usuario.rol;
+      // =====================================================
+      // CAMBIO DE ROL
+      // =====================================================
 
-const rolesPermitidos = [
-  "ADMIN",
-  "DIRECTOR",
-  "TRABAJADOR"
-];
+      const rolSolicitado =
+        rol !== undefined
+          ? rol
+          : usuario.rol;
 
-if (!rolesPermitidos.includes(rolSolicitado)) {
-  return res.status(400).json({
-    ok: false,
-    message: "El rol debe ser ADMIN, DIRECTOR o TRABAJADOR"
-  });
-}
+      const rolesPermitidos = [
+        "ADMIN",
+        "DIRECTOR",
+        "TRABAJADOR"
+      ];
 
-const rolAnterior = usuario.rol;
-const cambioDeRol = rolSolicitado !== rolAnterior;
+      if (!rolesPermitidos.includes(rolSolicitado)) {
+        return res.status(400).json({
+          ok: false,
+          message: "El rol debe ser ADMIN, DIRECTOR o TRABAJADOR"
+        });
+      }
+
+      const rolAnterior = usuario.rol;
+
+
+      // =====================================================
+      // EMPRESA Y OFICINA
+      // =====================================================
 
       const nuevaEmpresaId =
-  empresaId !== undefined
-    ? empresaId
-    : usuario.empresaId;
+        empresaId !== undefined
+          ? empresaId
+          : usuario.empresaId;
 
-let nuevaOficinaId =
-  oficinaId !== undefined
-    ? oficinaId
-    : usuario.oficinaId;
+      let nuevaOficinaId =
+        oficinaId !== undefined
+          ? oficinaId
+          : usuario.oficinaId;
 
 
-      // ADMIN
-      if (usuario.rol === "ADMIN") {
+      // =====================================================
+      // DATOS DEL TRABAJADOR
+      // =====================================================
+
+      const nuevosApellidos =
+        apellidos !== undefined
+          ? apellidos
+          : usuario.trabajador?.apellidos || "";
+
+      const nuevoDni =
+        dni !== undefined
+          ? dni
+          : usuario.trabajador?.dni || "";
+
+
+      // =====================================================
+      // VALIDACIONES SEGÚN EL NUEVO ROL
+      // =====================================================
+
+      // ADMIN no puede tener oficina
+      if (rolSolicitado === "ADMIN") {
+
+        nuevaOficinaId = null;
+
         if (!nuevaEmpresaId) {
           return res.status(400).json({
             ok: false,
             message: "La empresa es obligatoria para un ADMIN"
           });
         }
-
-        if (nuevaOficinaId) {
-          return res.status(400).json({
-            ok: false,
-            message: "Un ADMIN no puede estar asignado a una oficina"
-          });
-        }
       }
 
-      // DIRECTOR y TRABAJADOR
-      if (
-        usuario.rol === "DIRECTOR" ||
-        usuario.rol === "TRABAJADOR"
-      ) {
+
+      // DIRECTOR necesita empresa y oficina
+      if (rolSolicitado === "DIRECTOR") {
+
         if (!nuevaEmpresaId || !nuevaOficinaId) {
           return res.status(400).json({
             ok: false,
-            message: "La empresa y la oficina son obligatorias"
+            message: "La empresa y la oficina son obligatorias para un DIRECTOR"
           });
         }
       }
 
-      // Comprobar empresa
+
+      // TRABAJADOR necesita empresa, oficina, apellidos y DNI
+      if (rolSolicitado === "TRABAJADOR") {
+
+        if (!nuevaEmpresaId || !nuevaOficinaId) {
+          return res.status(400).json({
+            ok: false,
+            message: "La empresa y la oficina son obligatorias para un TRABAJADOR"
+          });
+        }
+
+        if (!nuevosApellidos || !nuevoDni) {
+          return res.status(400).json({
+            ok: false,
+            message: "Apellidos y DNI son obligatorios para un TRABAJADOR"
+          });
+        }
+      }
+
+
+      // =====================================================
+      // COMPROBAR EMPRESA
+      // =====================================================
+
       if (nuevaEmpresaId) {
+
         const empresa = await prisma.empresa.findUnique({
           where: {
             id: nuevaEmpresaId
@@ -1055,8 +1096,13 @@ let nuevaOficinaId =
         }
       }
 
-      // Comprobar oficina
+
+      // =====================================================
+      // COMPROBAR OFICINA
+      // =====================================================
+
       if (nuevaOficinaId) {
+
         const oficina = await prisma.oficina.findFirst({
           where: {
             id: nuevaOficinaId,
@@ -1072,16 +1118,22 @@ let nuevaOficinaId =
         }
       }
 
-      // Comprobar email si cambia
+
+      // =====================================================
+      // COMPROBAR EMAIL
+      // =====================================================
+
       if (
         email !== undefined &&
         email !== usuario.email
       ) {
-        const usuarioExistente = await prisma.usuario.findUnique({
-          where: {
-            email
-          }
-        });
+
+        const usuarioExistente =
+          await prisma.usuario.findUnique({
+            where: {
+              email
+            }
+          });
 
         if (
           usuarioExistente &&
@@ -1094,45 +1146,140 @@ let nuevaOficinaId =
         }
       }
 
-  const resultado = await prisma.$transaction(async (tx) => {
-  const datosUsuario = {
-    ...(nombre !== undefined && { nombre }),
-    ...(email !== undefined && { email }),
-    ...(activo !== undefined && { activo }),
 
-    empresaId: nuevaEmpresaId || null,
-    oficinaId: nuevaOficinaId || null,
+      // =====================================================
+      // ACTUALIZAR USUARIO Y TRABAJADOR
+      // =====================================================
 
-    ...(password !== undefined &&
-      password !== "" && {
-        password: await bcrypt.hash(password, 12)
-      })
-  };
+      const resultado = await prisma.$transaction(
+        async (tx) => {
 
-  const usuarioActualizado = await tx.usuario.update({
-    where: {
-      id
-    },
-    data: datosUsuario
-  });
+          const datosUsuario = {
 
-  // Si es trabajador, actualizar también sus datos específicos
-  if (usuario.rol === "TRABAJADOR") {
-    await tx.trabajador.update({
-      where: {
-        usuarioId: usuario.id
-      },
-      data: {
-        ...(apellidos !== undefined && { apellidos }),
-        ...(dni !== undefined && { dni }),
-        empresaId: nuevaEmpresaId,
-        oficinaId: nuevaOficinaId
-      }
-    });
-  }
+            ...(nombre !== undefined && {
+              nombre
+            }),
 
-  return usuarioActualizado;
-});
+            ...(email !== undefined && {
+              email
+            }),
+
+            ...(activo !== undefined && {
+              activo
+            }),
+
+            rol: rolSolicitado,
+
+            empresaId:
+              nuevaEmpresaId || null,
+
+            oficinaId:
+              nuevaOficinaId || null,
+
+            ...(password !== undefined &&
+              password !== "" && {
+                password:
+                  await bcrypt.hash(
+                    password,
+                    12
+                  )
+              })
+          };
+
+
+          const usuarioActualizado =
+            await tx.usuario.update({
+              where: {
+                id
+              },
+              data: datosUsuario
+            });
+
+
+          // =================================================
+          // TRABAJADOR → ADMIN / DIRECTOR
+          // =================================================
+
+          if (
+            rolAnterior === "TRABAJADOR" &&
+            rolSolicitado !== "TRABAJADOR"
+          ) {
+
+            await tx.trabajador.deleteMany({
+              where: {
+                usuarioId: usuario.id
+              }
+            });
+          }
+
+
+          // =================================================
+          // ADMIN / DIRECTOR → TRABAJADOR
+          // =================================================
+
+          if (
+            rolSolicitado === "TRABAJADOR"
+          ) {
+
+            if (usuario.trabajador) {
+
+              // Ya existe registro Trabajador
+              // → actualizarlo
+
+              await tx.trabajador.update({
+                where: {
+                  usuarioId: usuario.id
+                },
+                data: {
+                  apellidos:
+                    nuevosApellidos,
+
+                  dni:
+                    nuevoDni,
+
+                  empresaId:
+                    nuevaEmpresaId,
+
+                  oficinaId:
+                    nuevaOficinaId
+                }
+              });
+
+            } else {
+
+              // No existe registro Trabajador
+              // → crearlo
+
+              await tx.trabajador.create({
+                data: {
+                  apellidos:
+                    nuevosApellidos,
+
+                  dni:
+                    nuevoDni,
+
+                  usuarioId:
+                    usuario.id,
+
+                  empresaId:
+                    nuevaEmpresaId,
+
+                  oficinaId:
+                    nuevaOficinaId
+                }
+              });
+            }
+          }
+
+
+          return usuarioActualizado;
+        }
+      );
+
+
+      // =====================================================
+      // RESPUESTA
+      // =====================================================
 
       res.json({
         ok: true,
@@ -1149,7 +1296,11 @@ let nuevaOficinaId =
       });
 
     } catch (error) {
-      console.error("Error modificando usuario:", error);
+
+      console.error(
+        "Error modificando usuario:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
