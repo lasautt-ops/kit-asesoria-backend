@@ -151,6 +151,7 @@ model Cliente {
   dniAdministrador String?
   email     String
   telefono  String?
+  activo Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
