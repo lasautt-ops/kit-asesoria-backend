@@ -2677,7 +2677,7 @@ app.patch(
 
                 ...(oficinaId !== undefined && {
                   oficinaId
-                })
+                }),
 
                 ...(activo !== undefined && {
                   activo
