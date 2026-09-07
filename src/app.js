@@ -2593,7 +2593,8 @@ app.patch(
         email === undefined &&
         telefono === undefined &&
         empresaId === undefined &&
-        oficinaId === undefined
+        oficinaId === undefined &&
+        activo === undefined
       ) {
         return res.status(400).json({
           ok: false,
