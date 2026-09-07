@@ -1948,152 +1948,6 @@ app.post(
       }
 
 
-// Cambiar contraseña de acceso de un cliente
-app.post(
-  "/api/clientes/:id/cambiar-password",
-  autenticarToken,
-  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { password } = req.body;
-
-      // =================================================
-      // VALIDAR CONTRASEÑA
-      // =================================================
-
-      if (!password) {
-        return res.status(400).json({
-          ok: false,
-          message: "La contraseña es obligatoria"
-        });
-      }
-
-      if (password.length < 8) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "La contraseña debe tener al menos 8 caracteres"
-        });
-      }
-
-      // =================================================
-      // BUSCAR CLIENTE
-      // =================================================
-
-      const cliente =
-        await prisma.cliente.findUnique({
-          where: {
-            id
-          }
-        });
-
-      if (!cliente) {
-        return res.status(404).json({
-          ok: false,
-          message: "Cliente no encontrado"
-        });
-      }
-
-      // =================================================
-      // COMPROBAR PERMISOS ADMIN
-      // =================================================
-
-      if (req.usuario.rol === "ADMIN") {
-
-        if (
-          cliente.empresaId !==
-          req.usuario.empresaId
-        ) {
-          return res.status(403).json({
-            ok: false,
-            message:
-              "El administrador no puede cambiar la contraseña de clientes de otra empresa"
-          });
-        }
-
-      }
-
-      // =================================================
-      // COMPROBAR PERMISOS DIRECTOR
-      // =================================================
-
-      if (req.usuario.rol === "DIRECTOR") {
-
-        if (
-          cliente.empresaId !==
-            req.usuario.empresaId ||
-          cliente.oficinaId !==
-            req.usuario.oficinaId
-        ) {
-          return res.status(403).json({
-            ok: false,
-            message:
-              "El director no puede cambiar la contraseña de clientes de otra oficina"
-          });
-        }
-
-      }
-
-      // =================================================
-      // COMPROBAR QUE TIENE ACCESO
-      // =================================================
-
-      if (!cliente.usuarioId) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "Este cliente todavía no tiene un acceso al Portal creado"
-        });
-      }
-
-      // =================================================
-      // ENCRIPTAR NUEVA CONTRASEÑA
-      // =================================================
-
-      const passwordHash =
-        await bcrypt.hash(
-          password,
-          10
-        );
-
-      // =================================================
-      // ACTUALIZAR CONTRASEÑA
-      // =================================================
-
-      await prisma.usuario.update({
-        where: {
-          id: cliente.usuarioId
-        },
-        data: {
-          password: passwordHash
-        }
-      });
-
-      res.json({
-        ok: true,
-        message:
-          "Contraseña del Portal actualizada correctamente"
-      });
-
-    } catch (error) {
-
-      console.error(
-        "Error cambiando contraseña del cliente:",
-        error
-      );
-
-      res.status(500).json({
-        ok: false,
-        message:
-          "Error interno del servidor"
-      });
-
-    }
-  }
-);
-
-      
       // Comprobar permisos según el rol
       if (req.usuario.rol === "ADMIN") {
         if (cliente.empresaId !== req.usuario.empresaId) {
@@ -2189,6 +2043,146 @@ app.post(
     }
   }
 );
+
+// Cambiar contraseña de acceso de un cliente
+app.post(
+  "/api/clientes/:id/cambiar-password",
+  autenticarToken,
+  permitirRoles("SUPERADMIN", "ADMIN", "DIRECTOR"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { password } = req.body;
+
+      // =================================================
+      // VALIDAR CONTRASEÑA
+      // =================================================
+
+      if (!password) {
+        return res.status(400).json({
+          ok: false,
+          message: "La contraseña es obligatoria"
+        });
+      }
+
+      if (password.length < 8) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            "La contraseña debe tener al menos 8 caracteres"
+        });
+      }
+
+      // =================================================
+      // BUSCAR CLIENTE
+      // =================================================
+
+      const cliente =
+        await prisma.cliente.findUnique({
+          where: {
+            id
+          }
+        });
+
+      if (!cliente) {
+        return res.status(404).json({
+          ok: false,
+          message: "Cliente no encontrado"
+        });
+      }
+
+      // =================================================
+      // COMPROBAR PERMISOS ADMIN
+      // =================================================
+
+      if (req.usuario.rol === "ADMIN") {
+        if (
+          cliente.empresaId !==
+          req.usuario.empresaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message:
+              "El administrador no puede cambiar la contraseña de clientes de otra empresa"
+          });
+        }
+      }
+
+      // =================================================
+      // COMPROBAR PERMISOS DIRECTOR
+      // =================================================
+
+      if (req.usuario.rol === "DIRECTOR") {
+        if (
+          cliente.empresaId !==
+            req.usuario.empresaId ||
+          cliente.oficinaId !==
+            req.usuario.oficinaId
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message:
+              "El director no puede cambiar la contraseña de clientes de otra oficina"
+          });
+        }
+      }
+
+      // =================================================
+      // COMPROBAR QUE TIENE ACCESO
+      // =================================================
+
+      if (!cliente.usuarioId) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            "Este cliente todavía no tiene un acceso al Portal creado"
+        });
+      }
+
+      // =================================================
+      // ENCRIPTAR NUEVA CONTRASEÑA
+      // =================================================
+
+      const passwordHash =
+        await bcrypt.hash(
+          password,
+          10
+        );
+
+      // =================================================
+      // ACTUALIZAR CONTRASEÑA
+      // =================================================
+
+      await prisma.usuario.update({
+        where: {
+          id: cliente.usuarioId
+        },
+        data: {
+          password: passwordHash
+        }
+      });
+
+      res.json({
+        ok: true,
+        message:
+          "Contraseña del Portal actualizada correctamente"
+      });
+
+    } catch (error) {
+      console.error(
+        "Error cambiando contraseña del cliente:",
+        error
+      );
+
+      res.status(500).json({
+        ok: false,
+        message:
+          "Error interno del servidor"
+      });
+    }
+  }
+);
+
 // Obtener clientes según el rol
 app.get(
   "/api/clientes",
