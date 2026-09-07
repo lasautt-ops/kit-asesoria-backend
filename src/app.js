@@ -2269,7 +2269,6 @@ app.patch(
         oficinaId
       } = req.body;
 
-      // Buscar cliente
       const cliente = await prisma.cliente.findUnique({
         where: {
           id
@@ -2283,7 +2282,10 @@ app.patch(
         });
       }
 
-      // TRABAJADOR solo puede modificar sus clientes asignados
+      // =================================================
+      // PERMISOS TRABAJADOR
+      // =================================================
+
       if (req.usuario.rol === "TRABAJADOR") {
         const trabajador = await prisma.trabajador.findUnique({
           where: {
@@ -2306,12 +2308,16 @@ app.patch(
         }
       }
 
-      // ADMIN solo puede modificar clientes de su empresa
+      // =================================================
+      // PERMISOS ADMIN
+      // =================================================
+
       if (req.usuario.rol === "ADMIN") {
         if (cliente.empresaId !== req.usuario.empresaId) {
           return res.status(403).json({
             ok: false,
-            message: "El administrador no puede modificar clientes de otra empresa"
+            message:
+              "El administrador no puede modificar clientes de otra empresa"
           });
         }
 
@@ -2321,12 +2327,16 @@ app.patch(
         ) {
           return res.status(403).json({
             ok: false,
-            message: "El administrador no puede mover el cliente a otra empresa"
+            message:
+              "El administrador no puede mover el cliente a otra empresa"
           });
         }
       }
 
-      // DIRECTOR solo puede modificar clientes de su oficina
+      // =================================================
+      // PERMISOS DIRECTOR
+      // =================================================
+
       if (req.usuario.rol === "DIRECTOR") {
         if (
           cliente.empresaId !== req.usuario.empresaId ||
@@ -2334,7 +2344,8 @@ app.patch(
         ) {
           return res.status(403).json({
             ok: false,
-            message: "El director no puede modificar clientes de otra oficina"
+            message:
+              "El director no puede modificar clientes de otra oficina"
           });
         }
 
@@ -2344,7 +2355,8 @@ app.patch(
         ) {
           return res.status(403).json({
             ok: false,
-            message: "El director no puede mover el cliente a otra empresa"
+            message:
+              "El director no puede mover el cliente a otra empresa"
           });
         }
 
@@ -2354,12 +2366,16 @@ app.patch(
         ) {
           return res.status(403).json({
             ok: false,
-            message: "El director no puede mover el cliente a otra oficina"
+            message:
+              "El director no puede mover el cliente a otra oficina"
           });
         }
       }
 
-      // TRABAJADOR no puede cambiar empresa ni oficina
+      // =================================================
+      // RESTRICCIONES TRABAJADOR
+      // =================================================
+
       if (req.usuario.rol === "TRABAJADOR") {
         if (
           empresaId !== undefined &&
@@ -2367,7 +2383,8 @@ app.patch(
         ) {
           return res.status(403).json({
             ok: false,
-            message: "El trabajador no puede cambiar la empresa del cliente"
+            message:
+              "El trabajador no puede cambiar la empresa del cliente"
           });
         }
 
@@ -2377,13 +2394,16 @@ app.patch(
         ) {
           return res.status(403).json({
             ok: false,
-            message: "El trabajador no puede cambiar la oficina del cliente"
+            message:
+              "El trabajador no puede cambiar la oficina del cliente"
           });
         }
       }
 
-      // Si se quiere cambiar empresa u oficina,
-      // comprobar que la oficina pertenece a la empresa
+      // =================================================
+      // EMPRESA Y OFICINA RESULTANTES
+      // =================================================
+
       const nuevaEmpresaId =
         empresaId !== undefined
           ? empresaId
@@ -2393,6 +2413,10 @@ app.patch(
         oficinaId !== undefined
           ? oficinaId
           : cliente.oficinaId;
+
+      // =================================================
+      // VALIDAR OFICINA
+      // =================================================
 
       if (
         empresaId !== undefined ||
@@ -2408,12 +2432,16 @@ app.patch(
         if (!oficina) {
           return res.status(400).json({
             ok: false,
-            message: "La oficina no existe o no pertenece a la empresa seleccionada"
+            message:
+              "La oficina no existe o no pertenece a la empresa seleccionada"
           });
         }
       }
 
-      // Comprobar que al menos un dato se quiere modificar
+      // =================================================
+      // COMPROBAR QUE HAY ALGO QUE MODIFICAR
+      // =================================================
+
       if (
         nombre === undefined &&
         cif === undefined &&
@@ -2427,66 +2455,140 @@ app.patch(
       ) {
         return res.status(400).json({
           ok: false,
-          message: "Debes indicar al menos un dato para modificar"
+          message:
+            "Debes indicar al menos un dato para modificar"
         });
       }
 
-      // Actualizar cliente
-      const clienteActualizado = await prisma.cliente.update({
-        where: {
-          id
-        },
-        data: {
-          ...(nombre !== undefined && {
-            nombre
-          }),
+      // =================================================
+      // COMPROBAR EMAIL SI SE MODIFICA
+      // =================================================
 
-          ...(cif !== undefined && {
-            cif: cif || null
-          }),
+      if (email !== undefined) {
+        const usuarioConEseEmail =
+          await prisma.usuario.findUnique({
+            where: {
+              email
+            }
+          });
 
-          ...(direccionFiscal !== undefined && {
-            direccionFiscal: direccionFiscal || null
-          }),
-
-          ...(administrador !== undefined && {
-            administrador: administrador || null
-          }),
-
-          ...(dniAdministrador !== undefined && {
-            dniAdministrador: dniAdministrador || null
-          }),
-
-          ...(email !== undefined && {
-            email
-          }),
-
-          ...(telefono !== undefined && {
-            telefono: telefono || null
-          }),
-
-          ...(empresaId !== undefined && {
-            empresaId
-          }),
-
-          ...(oficinaId !== undefined && {
-            oficinaId
-          })
+        if (
+          usuarioConEseEmail &&
+          usuarioConEseEmail.id !== cliente.usuarioId
+        ) {
+          return res.status(409).json({
+            ok: false,
+            message:
+              "El email ya está asociado a otro usuario"
+          });
         }
-      });
+      }
+
+      // =================================================
+      // ACTUALIZAR CLIENTE + USUARIO
+      // =================================================
+
+      const resultado =
+        await prisma.$transaction(async (tx) => {
+
+          const clienteActualizado =
+            await tx.cliente.update({
+              where: {
+                id
+              },
+              data: {
+                ...(nombre !== undefined && {
+                  nombre
+                }),
+
+                ...(cif !== undefined && {
+                  cif: cif || null
+                }),
+
+                ...(direccionFiscal !== undefined && {
+                  direccionFiscal:
+                    direccionFiscal || null
+                }),
+
+                ...(administrador !== undefined && {
+                  administrador:
+                    administrador || null
+                }),
+
+                ...(dniAdministrador !== undefined && {
+                  dniAdministrador:
+                    dniAdministrador || null
+                }),
+
+                ...(email !== undefined && {
+                  email
+                }),
+
+                ...(telefono !== undefined && {
+                  telefono: telefono || null
+                }),
+
+                ...(empresaId !== undefined && {
+                  empresaId
+                }),
+
+                ...(oficinaId !== undefined && {
+                  oficinaId
+                })
+              }
+            });
+
+          // =============================================
+          // SINCRONIZAR USUARIO DEL PORTAL
+          // =============================================
+
+          if (cliente.usuarioId) {
+
+            await tx.usuario.update({
+              where: {
+                id: cliente.usuarioId
+              },
+              data: {
+
+                ...(nombre !== undefined && {
+                  nombre
+                }),
+
+                ...(email !== undefined && {
+                  email
+                }),
+
+                ...(empresaId !== undefined && {
+                  empresaId: nuevaEmpresaId
+                }),
+
+                ...(oficinaId !== undefined && {
+                  oficinaId: nuevaOficinaId
+                })
+              }
+            });
+          }
+
+          return clienteActualizado;
+        });
 
       res.json({
         ok: true,
-        message: "Cliente actualizado correctamente",
-        cliente: clienteActualizado
+        message:
+          "Cliente actualizado correctamente",
+        cliente: resultado
       });
 
     } catch (error) {
-      console.error("Error modificando cliente:", error);
+      console.error(
+        "Error modificando cliente:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
-        message: "Error interno del servidor"
+        message:
+          "Error interno del servidor"
       });
     }
   }
