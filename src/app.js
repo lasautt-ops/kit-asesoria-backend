@@ -2407,7 +2407,8 @@ app.patch(
         email,
         telefono,
         empresaId,
-        oficinaId
+        oficinaId,
+        activo
       } = req.body;
 
       const cliente = await prisma.cliente.findUnique({
