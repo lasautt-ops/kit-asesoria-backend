@@ -2711,6 +2711,10 @@ app.patch(
 
                 ...(oficinaId !== undefined && {
                   oficinaId: nuevaOficinaId
+                }),
+
+                ...(activo !== undefined && {
+                  activo
                 })
               }
             });
